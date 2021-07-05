@@ -1,0 +1,7 @@
+"0","abcde <- merge (abcd, indi_barrio, by = 'barrio', all.x = TRUE)"
+"0","abcdef <- merge (abcde, paro_barrio, by = 'barrio', all.x = TRUE)"
+"0","abcdefg <- merge (abcdef, reci_barrio, by = 'barrio', all.x = TRUE)"
+"0","abcdefgh <- merge (abcdefg, renta_barrio, by = 'barrio', all.x = TRUE)"
+"0","abcdefghi <- merge (abcdefgh, tasa_barrio, by = 'barrio', all.x = TRUE)"
+"0","abcdefghij <- merge (abcdefghi, vehi_barrio, by = 'barrio', all.x = TRUE)"
+"0","total <- abcdefghij"

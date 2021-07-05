@@ -1,0 +1,5 @@
+"0","#SUPUESTO DE NORMALIDAD: Con el gráfico Q-Q se hace una primera aproximación visual de si hay o no normalidad. Hay que tener en cuenta que este gráfico es meramente descriptivo."
+"0",""
+"0","#Interpretación: La nube de puntos se sitúa sobre la recta. En un principio, visualmente se aprecia que nuestros datos cumplen el supuesto de normalidad.'''"
+"0","# Gráfico Q-Q"
+"0","qqnorm( data$muertes_zymotic_anual ) # la nube de puntos "

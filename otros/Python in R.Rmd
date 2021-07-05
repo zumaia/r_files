@@ -1,0 +1,270 @@
+---
+title: "Python in R"
+author: "Oscar Rojo Martín"
+date: "26/5/2020"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+
+# .- Limpieza y preparación entorno trabajo
+```{r Limpieza y preparación}
+# Limpiamos el entorno de Trabajo
+rm(list=ls())
+
+# Limpiamos la consola
+cat("\014")
+
+# Comprobamos que está bien establecido el directorio
+getwd()
+dir()
+```
+# .- Directorio de trabajo
+```{r Directorio de trabajo}
+#indicamos el directorio de trabajo
+setwd("~/Documentos/R")
+```
+
+
+# Library
+
+Fire up an R Markdown document and load tidyverse and reticulate:
+
+    tidyverse - Loads the core data wrangling and visualization packages needed to work in R.
+    reticulate - The key link between R and Python.
+
+```{r Carga librerias}
+# Importamos las librerias a utilizar
+
+packages <- c( "tidyverse", "reticulate")
+newpack  = packages[!(packages %in% installed.packages()[,"Package"])]
+
+if(length(newpack)) install.packages(newpack)
+a=lapply(packages, library, character.only=TRUE)
+```
+
+# Create  a New Python Enviroment
+
+Create a New Python Environment
+
+    Run the following code in your terminal:
+
+conda create -n py3.8 python=3.8 scikit-learn pandas numpy matplotlib
+
+This code does the following:
+
+    Creates a new Python environment called “py3.8”
+    Installs python version 3.8
+    Installs the latest versions of scikit-learn, pandas, numpy, and matplotlib.
+
+In the future you can always add more python packages (more on this in Pro Tips).
+List your Conda Environments (in the Terminal)
+
+    Use conda list env to list your Conda Environments in the Terminal.
+    If you see py3.8, you are good to go.
+
+List your Conda Enviromnents (in R Markdown)
+
+Back in R Markdown, we can do the same thing using retculate::conda_list().
+```{r}
+reticulate::conda_list()
+```
+De otra forma
+```{r}
+# library(reticulate)
+# use_pytoh("/usr/local/bin/python")
+```
+
+
+
+Set Your Conda Environment (in R Markdown)
+
+Make sure your R Markdown document activates the “py3.8” environment using use_condaenv().
+
+```{r}
+# reticulate::use_condaenv("py3.8", required = TRUE)
+use_condaenv("py3.8", required = TRUE)
+```
+
+
+
+Double check that reticulate is actually using your new conda env.
+```{r}
+# reticulate::py_config()
+py_config()
+```
+ou should see something like this where the python path is:
+
+    python: /Users/mdancho/opt/anaconda3/envs/py3.8/bin/python.
+
+It may not be exact, but you should see “py3.8” in the file path.
+
+
+# Python Tests
+
+All of the code in this section uses python code chunks. This means you need to use {python} instead of {r} code chunks.
+
+    Errors in this section: Are likely because you have a code chunk with {r} (it’s super easy to make this mistake)
+    Solution: Replace {r} with {python}.
+
+
+## Test 1 - Is Python working???
+
+    Let’s add 1 + 1
+    You should see 2
+
+```{python}
+# Is python working???
+1 + 1
+```
+
+## Test 2 - Numpy & Pandas
+
+    Import numpy and pandas using the import shorthand np and pd respectively.
+        numpy - Math Calculations
+        pandas - Data Wrangling
+
+```{python}
+import numpy as np
+import pandas as pd
+```
+
+### Numpy
+
+Test numpy using the np.arange() function to create a sequence of numbers in an array.
+
+```{python}
+np.arange(1, 10)
+```
+
+### Pandas
+
+Next, test pandas by creating a data frame df using pd.DataFrame().
+
+```{python}
+# Make a sequence in a data frame using dict format
+df = pd.DataFrame(data = {"sequence":np.arange(1,20,.01)})
+
+# Use assign (mutate) equivalent to calculate the np.sin() of the series
+df = df.assign(value=np.sin(df["sequence"]))
+
+df
+```
+
+### Test 3 - Matplotlib
+
+Run the following pandas plotting code. If the visualization appears, matplotlib is installed.
+
+```{python}
+import matplotlib as plt
+
+df.plot(x="sequence", y = "value", title = "Matplotlib")
+```
+
+### Test 4 - Scikit Learn
+
+Run a test Random Forest using RandomForestClassifier from the sklearn.ensemble module of Scikit Learn.
+
+
+```{python}
+from sklearn.ensemble import RandomForestClassifier
+
+clf = RandomForestClassifier(random_state=0)
+
+X = [[ 1,  2,  3],  # 2 samples, 3 features
+     [11, 12, 13]]
+
+y = [0, 1]  # classes of each sample
+
+clf.fit(X, y)
+```
+
+Use the predict() method to make a prediction on the training data set.
+
+```{python}
+clf.predict(X)  # predict classes of the training data
+```
+
+## Can you Run Affinity Progagation???
+
+If you are planning to attend Learning Lab 33 - HR Analytics Employee Clustering with Python Scikit Learn (Register Here), you will need to be able to perform the following algorithms to comple an Employee Clustering and Termination Analysis Project:
+
+    Affinity Propagation and DBSCAN Clustering Algorithms
+    TSNE Manifold Embedding
+
+A simple test is to run the AffinityPropagation test from Scikit Learn’s website.
+
+```{python}
+from sklearn.cluster import AffinityPropagation
+from sklearn.datasets import make_blobs
+
+# #############################################################################
+# Generate sample data
+centers = [[1, 1], [-1, -1], [1, -1]]
+X, labels_true = make_blobs(n_samples=300, centers=centers, cluster_std=0.5,
+                            random_state=0)
+
+# Compute Affinity Propagation
+af = AffinityPropagation(preference=-50).fit(X)
+cluster_centers_indices = af.cluster_centers_indices_
+labels = af.labels_
+
+n_clusters_ = len(cluster_centers_indices)
+
+# #############################################################################
+# Plot result
+import matplotlib.pyplot as plt
+from itertools import cycle
+
+plt.close('all')
+plt.figure(1)
+plt.clf()
+
+colors = cycle('bgrcmykbgrcmykbgrcmykbgrcmyk')
+for k, col in zip(range(n_clusters_), colors):
+    class_members = labels == k
+    cluster_center = X[cluster_centers_indices[k]]
+    plt.plot(X[class_members, 0], X[class_members, 1], col + '.')
+    plt.plot(cluster_center[0], cluster_center[1], 'o', markerfacecolor=col,
+             markeredgecolor='k', markersize=14)
+    for x in X[class_members]:
+        plt.plot([cluster_center[0], x[0]], [cluster_center[1], x[1]], col)
+
+plt.title('Estimated number of clusters: %d' % n_clusters_)
+plt.show()
+```
+
+Instalar kaggle
+```{bash}
+
+# pip install kaggle
+```
+
+
+```{bash}
+kaggle datasets download -d jtrofe/beer-recipes
+```
+
+```{bash}
+rm -f recipeData.csv
+rm -f styleData.csv
+ls
+unzip beer-recipes.zip 
+```
+
+```{python}
+import pandas
+beer = pd.read_csv("recipeData.csv")
+```
+```{python}
+beer.head()
+```
+

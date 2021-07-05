@@ -1,0 +1,1 @@
+{"frames":[{"func":"ts(df[\"zymotic\"], start = c(1854, 6), frequency = 12)","file":"","line_number":0,"end_line_number":0,"character_number":0,"end_character_number":0},{"func":"is.data.frame(data)","file":"","line_number":0,"end_line_number":0,"character_number":0,"end_character_number":0}],"message":"Error in df[\"zymotic\"] : objeto de tipo 'closure' no es subconjunto\n"}

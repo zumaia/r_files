@@ -1,0 +1,224 @@
+---
+title: "Vignete"
+author: "Oscar Rojo"
+date: "5/5/2021"
+output: html_document
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This R Markdown document is made interactive using Shiny. Unlike the more traditional workflow of creating static reports, you can now create documents that allow your readers to change the assumptions underlying your analysis and see the results immediately. 
+
+To learn more, see [Interactive Documents](http://rmarkdown.rstudio.com/authoring_shiny.html).
+
+## Inputs and Outputs
+
+```{r eruptionsdd, echo=FALSE}
+setwd("~/Documentos/MASTER UOC/Visualización de Datos/A8-PEC3/PEC3-COVID/PEC3-COVID")
+
+covid19_provincias_spain_consolidated <-read_csv("https://raw.githubusercontent.com/montera34/escovid19data/master/data/output/covid19-provincias-spain_consolidated.csv")
+#View(covid19_provincias_spain_consolidated)
+
+
+## Remove columns with more than 50% NA
+data_raw <- covid19_provincias_spain_consolidated[, which(colMeans(!is.na(covid19_provincias_spain_consolidated)) > 0.9)]
+
+data_raw[is.na(data_raw)] <- 0
+
+write.csv(data_raw,"MyData.csv", row.names = FALSE)
+
+# distinguimos variables "a nivel de intervalo" ("continuas" para ggplot)
+nums <- sapply(data_raw, is.numeric)
+continuas <- names(data_raw)[nums]
+
+# y variables "categóricas" ("discretas" para ggplot)
+cats <- sapply(data_raw, is.character)
+categoricas <- names(data_raw)[cats]
+
+    output$countryOutput <- renderUI({
+        selectInput("countryInput", "Con",
+                    sort(unique(data_raw$Con)),
+                    selected = "Colombia")
+    }) 
+
+inputPanel(
+  selectInput('y', 'Elige variable para eje Y', continuas, continuas[[1]]),
+  dateRangeInput("yearimput", "Año", 
+                 start  = "2020-01-01",
+                 end    =  Sys.Date(),
+                 min    = "2001-01-01",
+                 max    =  Sys.Date()),
+  selectInput("countryInput", "ccaa",
+                    sort(unique(data_raw$ccaa)),
+                    selected = "Andalucia")
+)
+
+ccaa = unique(data_raw$ccaa)
+
+filtered <- reactive({
+    if (is.null(input$countryInput)) {
+        return(NULL)
+    }    
+    data_raw %>%
+        filter(
+               y == input$typeInput,
+               ccaa == input$countryInput
+        )
+})
+
+renderPlot({
+        if (is.null(filtered())) {
+            return()
+        }
+        ggplot(aes(date, num_casos2, group = province)) +
+        geom_line(aes(color = province), alpha = 0.25) +
+        geom_smooth(
+          aes(group = NULL),
+          method = "loess",
+          span = 0.1,
+          se = FALSE,
+          size = 1.5,
+          color = "red"
+        ) +
+        theme_minimal() +
+        labs(y = "", x = "", title = "Media nuevos casos")
+    })
+
+```
+
+
+You can embed Shiny inputs and outputs in your document. Outputs are automatically updated whenever inputs change.  This demonstrates how a standard R plot can be made interactive by wrapping it in the Shiny `renderPlot` function. The `selectInput` and `sliderInput` functions create the input widgets used to drive the plot.
+
+```{r eruptions, echo=FALSE}
+inputPanel(
+  selectInput("n_breaks", label = "Number of bins:",
+              choices = c(10, 20, 35, 50), selected = 20),
+  
+  sliderInput("bw_adjust", label = "Bandwidth adjustment:",
+              min = 0.2, max = 2, value = 1, step = 0.2)
+)
+
+renderPlot({
+  hist(faithful$eruptions, probability = TRUE, breaks = as.numeric(input$n_breaks),
+       xlab = "Duration (minutes)", main = "Geyser eruption duration")
+  
+  dens <- density(faithful$eruptions, adjust = input$bw_adjust)
+  lines(dens, col = "blue")
+})
+```
+
+## Embedded Application
+
+It's also possible to embed an entire Shiny application within an R Markdown document using the `shinyAppDir` function. This example embeds a Shiny application located in another directory:
+
+```{r tabsets, echo=FALSE}
+shinyAppDir(
+  system.file("examples/06_tabsets", package = "shiny"),
+  options = list(
+    width = "100%", height = 550
+  )
+)
+```
+
+Note the use of the `height` parameter to determine how much vertical space the embedded application should occupy.
+
+You can also use the `shinyApp` function to define an application inline rather then in an external directory.
+
+In all of R code chunks above the `echo = FALSE` attribute is used. This is to prevent the R code within the chunk from rendering in the document alongside the Shiny components.
+
+```{r}
+library(shiny)
+# Define UI for application that draws a histogram
+ui <- fluidPage(
+    
+    # Application title
+    titlePanel("Old Faithful Geyser Data"),
+    
+      verbatimTextOutput("server"),
+  tags$script('
+          $(document).ready(function(){
+          var d = new Date();
+          var target = $("#clientTime");
+          target.val(d.toLocaleString());
+          target.trigger("change");
+          });
+          '),
+  textInput("clientTime", "Client Time", value = ""),
+  verbatimTextOutput("local"),
+    
+    # Sidebar with a slider input for number of bins 
+    sidebarLayout(
+        sidebarPanel(
+            sliderInput("bins",
+                        "Number of bins:",
+                        min = 1,
+                        max = 50,
+                        value = 30)
+        ),
+        
+        # Show a plot of the generated distribution
+        mainPanel(
+            plotOutput("distPlot")
+        )
+    )
+)
+# Define server logic required to draw a histogram
+server <- function(input, output) {
+  
+    output$server <- renderText({ c("Server time:", as.character(Sys.time()), as.character(Sys.timezone())) })
+    session$userData$time <- reactive({format(lubridate::mdy_hms(as.character(input$clientTime)), "%d/%m/%Y; %H:%M:%S")})
+    output$local <- renderText({session$userData$time() })
+    
+    output$distPlot <- renderPlot({
+        # generate bins based on input$bins from ui.R
+        x    <- faithful[, 2] 
+        bins <- seq(min(x), max(x), length.out = input$bins + 1)
+        
+        # draw the histogram with the specified number of bins
+        hist(x, breaks = bins, col = 'darkgray', border = 'white')
+    })
+}
+# Run the application 
+shinyApp(ui = ui, server = server)
+```
+
+
+
+```{r}
+library(shiny)
+library(lubridate)
+this_is_fixed <- now()
+
+ui <- fluidPage(
+
+  # App title ----
+  titlePanel("Time in the shiny world"),
+
+  mainPanel(
+      verbatimTextOutput(outputId = "fixed"),
+      verbatimTextOutput(outputId = "fluid")
+
+    )
+  )
+
+
+# Define server logic required to draw a histogram ----
+server <- function(input, output) {
+
+  output$fixed <- renderText({
+    this_is_fixed
+  })
+
+  output$fluid <- renderText({
+    now()
+  })
+
+}
+
+shinyApp(ui, server)
+```
+
+

@@ -1,0 +1,6 @@
+"0","estu_barrio_genero <- estudios %>%"
+"0","  filter(año==2019) %>%"
+"0","  select(-año,-est_eusk,-est_Tot)%>%"
+"0","  gather('genero', 'estudiantes', 'Mujer':'Hombre')%>%"
+"0","  reshape(idvar=c('barrio',""genero""), v.names = ""estudiantes"", timevar = ""estudios"", direction=""wide"")%>%"
+"0","  arrange(barrio)"

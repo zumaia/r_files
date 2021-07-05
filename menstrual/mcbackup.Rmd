@@ -1,0 +1,983 @@
+---
+title: 'Menstrual'
+author: "Autor: Oscar Rojo Martín"
+date: "Julio 2020"
+output:
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+    includes:
+      in_header: header.html
+  pdf_document:
+    latex_engine: xelatex
+  word_document: default
+always_allow_html: true
+---
+
+
+# .- Introducción
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+# .- Limpieza y preparación entorno trabajo
+```{r Limpieza y preparación}
+# Limpiamos el entorno de Trabajo
+rm(list=ls())
+
+# Limpiamos la consola
+cat("\014")
+
+# Comprobamos que está bien establecido el directorio
+getwd()
+dir()
+```
+```{r Directorio de trabajo}
+#indicamos el directorio de trabajo
+setwd("~/Documentos/R/menstrual")
+```
+## .- Carga de librerias
+```{r Carga librerias}
+# Importamos las librerias a utilizar
+
+packages <- c( "magrittr", "jsonlite", "tidyverse", "prettyR", "git2r","funModeling", "zoo", "lubridate", "GGally", "ggfortify", "ggplot2", "modeest")
+newpack  = packages[!(packages %in% installed.packages()[,"Package"])]
+
+if(length(newpack)) install.packages(newpack)
+a=lapply(packages, library, character.only=TRUE)
+```
+## .- Lectura JSON
+```{r}
+library(rjson)
+
+# You can pass directly the filename
+my.JSON <- fromJSON(file="mcbackup.json")
+```
+Genero las listas de cada elemento
+```{r}
+settings <- my.JSON$settings
+event <- my.JSON$event
+measure <- data.frame(my.JSON$measure)
+notification<- data.frame(my.JSON$notification)
+symptom<- data.frame(my.JSON$symptom)
+day <- data.frame(my.JSON$day)
+value <- data.frame(my.JSON$value)
+```
+Genero cada dataframe
+```{r}
+json_file_settings <- lapply(my.JSON$settings, function(x) {
+  x[sapply(x, is.null)] <- NA
+  unlist(x)
+})
+settings <-as.data.frame(t(do.call("cbind", json_file_settings)))
+```
+```{r}
+json_file_day <- lapply(my.JSON$day, function(x) {
+  x[sapply(x, is.null)] <- NA
+  unlist(x)
+})
+day <-as.data.frame(t(do.call("cbind", json_file_day)))
+```
+
+```{r}
+json_file_value <- lapply(my.JSON$value, function(x) {
+  x[sapply(x, is.null)] <- NA
+  unlist(x)
+})
+value <-as.data.frame(t(do.call("cbind", json_file_value)))
+```
+
+```{r}
+json_file_symptom <- lapply(my.JSON$symptom, function(x) {
+  x[sapply(x, is.null)] <- NA
+  unlist(x)
+})
+symptom <-as.data.frame(t(do.call("cbind", json_file_symptom)))
+```
+
+```{r}
+json_file_notification <- lapply(my.JSON$notification, function(x) {
+  x[sapply(x, is.null)] <- NA
+  unlist(x)
+})
+notification <- as.data.frame(t(do.call("cbind", json_file_notification)))
+```
+
+```{r}
+json_file_event <- lapply(my.JSON$event, function(x) {
+  x[sapply(x, is.null)] <- NA
+  unlist(x)
+})
+event <-as.data.frame(t(do.call("cbind", json_file_event)))
+```
+
+```{r}
+json_file_measure <- lapply(my.JSON$measure, function(x) {
+  x[sapply(x, is.null)] <- NA
+  unlist(x)
+})
+measure <-as.data.frame(t(do.call("cbind", json_file_measure)))
+```
+Eliminamos objetos innecesarioss
+```{r}
+rm(json_file_day,json_file_event,json_file_measure,json_file_notification,json_file_symptom,json_file_value,a,my.JSON,json_file_settings)
+```
+Cambiamos el nombre del id
+```{r}
+simptoma <- symptom %>% 
+  rename(symptom_id = id)
+valor <- value %>%
+  rename(value_id = id)
+```
+Fusionamos 2 tablas
+```{r}
+evento <- left_join(event, valor, by = "value_id")
+measures <- merge(simptoma, measure, by = "symptom_id", all = TRUE)
+data_raw1 <- merge(measures, evento, by= "symptom_id", all = TRUE)
+rm(symptom,simptoma,value,valor,measures,measure,settings)
+data_raw2 <- merge(data_raw1, notification, by = "symptom_id", all = TRUE)
+rm(event,notification,evento,setting,data_raw1)
+data_raw <- merge(data_raw2,day, by= "date", all = TRUE)
+rm(day, data_raw2, settings)
+```
+# .-EDA - Exloración y análisis de datos
+
+```{r EDA funcion}
+EDA_basico <- function(data)
+{
+  str(data)
+  dim(data)
+  colnames(data) 
+  summary(data)
+  # describe(data) #library(prettyR)
+}
+```
+## .-Resumen DATA-RAW
+
+```{r resume Data-Raw}
+EDA_basico(data_raw)
+
+```
+```{r}
+
+# Valores vacíos
+print("Mostrar variables con campos na")
+colSums(is.na(data_raw))
+print("Mostrar variables con datos vacios")
+colSums(data_raw=="")
+print("Valores con integrogación")
+colSums(data_raw==" ?")
+#print("Mostrar variables con campos na")
+#which (is.na(data_raw))
+print("Es cierto que hay valores  na?")
+any(is.na(data_raw))
+print("Suma valores na")
+sum(is.na(data_raw))
+```
+
+```{r}
+data <- dplyr::select(data_raw, -id.y, -label, -hour, -minute, -when, -delay, -active, -note, -deleted)
+```
+# Resumen data-frame
+```{r AED/EDA funcion}
+aed_basico <- function(data)
+{
+  glimpse(data)
+  status(data) #library(git2r)
+  head(freq(data))
+  profiling_num(as.numeric(data))
+  plot_num(data)
+  describe(data)
+  dim(data)
+  summary(data)
+  colnames(data)
+}
+```
+```{r}
+#aed_basico((data))
+
+```
+```{r}
+glimpse(data)
+status(data) #library(git2r)
+head(freq(data)) 
+describe(data)
+dim(data)
+summary(data)
+colnames(data)
+```
+Obtenemos la fecha de datatime
+```{r}
+data$Date <- lubridate::as_datetime(data$datetime)
+data$date_ymd <- str_split_fixed(data$Date, " ", 2)
+```
+
+Si en date es NA, copia el campo de date_ymd
+```{r}
+data$date <- ifelse(is.na(data$date), data$date_ymd, data$date)
+```
+Selecciono varias columnas
+```{r}
+data <- select(data, -symptom_id, -value_id, -datetime, -value_id, -Date,  -date_ymd)
+```
+```{r}
+print("Mostrar variables con datos vacios")
+colSums(data=="")
+```
+
+Eliminar filas con campos vacios y na
+```{r}
+datos <- data[-which(data$date==""),]
+df <- datos[!is.na(datos$name.x), ]
+df$name.y[is.na(df$name.y)] <- "desconocido"
+df[is.na(df)] <- 0
+```
+```{r}
+datos <- select(df, -layout, -chart, -category, -id.x, -value)
+```
+```{r}
+print("Suma valores na")
+sum(is.na(datos))
+print("Mostrar variables con campos na")
+colSums(is.na(datos))
+```
+```{r}
+df <- select(datos, -num.x, -mode, -num.y )
+rm(data, data_raw, datos)
+
+
+```
+
+
+
+
+
+```{r}
+df$date <- as.Date(df$date)
+cols<-c("name.x","type","color","name.y", "icon")
+for (i in cols){
+  df[,i] <- as.factor(df[,i])
+}
+```
+
+```{r}
+# ¿Con qué variables tendría sentido un proceso de discretización?
+apply(df,2, function(x) length(unique(x)))
+```
+
+```{r}
+colnames(df) <- c("date","categ_1", "categ_2", "categ_3", "categ_4", "categ_5")
+```
+
+```{r Scatterplot de Variables}
+textscatter <- function(df, mapping, ...) {
+   ggplot(df, mapping, ...) + geom_text()
+}
+library(GGally)
+ggpairs(
+  df, 
+  title="Scatterplot de Variables",
+  columns = c(2,3,5,6),
+  mapping=ggplot2::aes(colour = categ_1))
+  lower = list(continuous = textscatter)
+
+```
+```{r}
+skimr::skim(df)
+```
+
+
+```{r}
+list(df$categ_1[1:2])
+```
+```{r}
+str(df$categ_1)
+```
+```{r}
+levels(df$categ_1)
+```
+```{r}
+summary(df$categ_1)
+```
+```{r eval=FALSE, include=FALSE}
+
+cols<-c("categ_1", "categ_2", "categ_3", "categ_4", "categ_5")
+for (i in cols){
+  df[,i] <- as.numeric(df[,i])
+}
+```
+
+## .- Otro Resumen dataframe
+```{r}
+aed_basico <- function(data)
+{
+  glimpse(data)
+  status(data) #library(git2r)
+  freq(data) 
+  # profiling_num(data)
+  plot_num(data)
+  describe(data)
+  dim(data)
+  summary(data)
+  colnames(data)
+  str(data)
+}
+```
+```{r}
+aed_basico((df))
+```
+
+
+```{r eval=FALSE, include=FALSE}
+boxplot(df[2:6])
+```
+```{r}
+#library(epiDisplay)
+epiDisplay::codebook(df[2:6])
+```
+```{r}
+epiDisplay::summ(df)
+```
+
+```{r}
+visdat::vis_dat(df)
+```
+```{r}
+# creo una columna de unos
+ones<- matrix(1, 822, 1)
+```
+```{r}
+df <- cbind(df,ones)
+df$ones <- as.factor(df$ones)
+```
+
+
+
+
+## .-Matrices
+```{r}
+library(psych)
+pairs.panels(df, pch=21,main="Matriz de Dispersión, Histograma y Correlación")
+```
+
+
+```{r}
+ts <- seq.POSIXt(as.POSIXct("2012-01-01",'%Y/%m/%d'), as.POSIXct("2020-06-20",'%Y/%m/%d'), by="day")
+
+ts <- seq.POSIXt(as.POSIXlt("2012-01-01"), as.POSIXlt("2020-06-20"), by="day")
+ts <- format.POSIXct(ts,'%Y/%m/%d')
+
+dfa <- data.frame(timestamp=ts)
+
+```
+
+```{r}
+X <- matrix(0, 3093, 6)
+ddfa <- cbind(dfa,X)
+colnames(ddfa)<- c("date", "categ_1", "categ_2", "categ_3", "categ_4", "categ_5","ones")
+ddfa <- as.data.frame(ddfa)
+```
+
+```{r}
+
+ddfa$date <- as.Date(ddfa$date)
+```
+
+
+
+
+
+
+
+
+
+
+
+```{r echo=FALSE}
+cols <- c("categ_1", "categ_2", "categ_3", "categ_4", "categ_5","ones")
+for (i in cols){
+  ddfa[,i] <- as.factor(ddfa[,i])
+}
+
+```
+```{r}
+# Sustituyo valores NA en 0
+df$ones[is.na(df$ones)] <- 0
+```
+
+
+
+
+
+
+```{r}
+data <- full_join(ddfa,df) %>%
+  group_by(date) #%>%
+  #arrange(date())
+```
+```{r}
+# Elimino las tablas que no necesito
+rm(ddfa, df,dfa,lower,X,ones)
+```
+
+```{r}
+ggplot( data = data, aes( date, categ_1 )) + geom_line() 
+ggplot(data, aes(x=date, y=categ_1,color=categ_1)) + geom_line()
+
+
+```
+
+```{r}
+library(tidyr)
+data_F <- spread(data, key = categ_1, value = ones)%>%
+  select(-categ_3,-categ_4,-categ_5)%>%
+  select("Menstruación","Pechos sensibles","Dolor muscular / articular","Dolores de cabeza", "Manchado / Sangrado")
+```
+```{r}
+
+colnames(data_F) <- c("fecha", "menstruacion", "p_sensible", "dolor_muscular", "dolor_cabeza", "manchado")
+#data_F( ,[2:6])[is.na(data_F( ,[2:6]))] <- 0
+data_F$menstruacion[is.na(data_F$menstruacion)] <- 0
+data_F$p_sensible[is.na(data_F$p_sensible)] <- 0
+data_F$dolor_muscular[is.na(data_F$dolor_muscular)] <- 0
+data_F$dolor_cabeza[is.na(data_F$dolor_cabeza)] <- 0
+data_F$manchado[is.na(data_F$manchado)] <- 0
+```
+```{r}
+#data_FF <- data_F%>%
+#  group_by(fecha)%>%
+#  summarise(menstruacion = sum(menstruacion),
+#            p_sensible = sum(p_sensible),
+#            dolor_muscular = sum(dolor_muscular),
+#            dolor_cabeza = sum(dolor_cabeza))%>%
+#  arrange(fecha)
+```
+
+```{r}
+
+colss <- c("menstruacion", "p_sensible", "dolor_muscular", "dolor_cabeza", "manchado")
+for (i in colss){
+  data_F[,i] <- as.numeric(unlist(data_F[,i]))
+}
+```
+```{r}
+# sustituyo 1 por 0 y 2 por 1
+data_F[data_F == 1] <- 0
+data_F[data_F == 2] <- 1
+
+data_F$fecha <- as.Date(data_F$fecha)
+
+head(data_F)
+```
+
+
+
+
+
+
+
+```{r}
+data_F_mens=0
+data_F_mens$difere=0
+data_F_mens <- data_F %>%
+  select(fecha,menstruacion)%>%
+	group_by(fecha) %>%
+  filter(menstruacion == 1)%>%
+  arrange(fecha)
+data_F_mens$difere=0
+for (i in 2:nrow(data_F_mens)) {
+  data_F_mens$difere[i] <- difftime(data_F_mens$fecha[i], data_F_mens$fecha[i-1], units = "days")
+}
+
+
+```
+```{r}
+dataFmen <- data_F_mens %>%
+  dplyr::mutate(dates2=dmy(fecha),
+                year = lubridate::year(fecha), 
+                month = lubridate::month(fecha), 
+                day = lubridate::day(fecha))
+dataFmen$date <-paste(dataFmen$month, dataFmen$year, sep="-")
+dataFmen$dmy <- paste(dataFmen$year,dataFmen$month, dataFmen$day, sep="-")
+#dataFmen$dia <- paste(dateFmen$day, dataFmen$month, dataFmen$year, sep = "-")
+dataFmen$date
+dataFmen$dmy <- as.Date(dataFmen$dmy)
+DF <- dataFmen%>%
+  dplyr::select(difere)
+```
+
+```{r}
+
+data_F_mensual <- dataFmen %>% 
+  select(date,difere)%>%
+  group_by(date)%>%
+  summarise(dias=sum(difere))
+
+data_F_mensual$date <- str_pad(data_F_mensual$date,width = 7, side="left", pad = "0")
+
+
+library(zoo)
+data_F_mensual$date <- zoo::as.yearmon(data_F_mensual$date, format = "%m-%Y")
+
+data_F_mensual %>%
+  arrange(date)
+```
+```{r}
+rm(data, data_F, data_F_mens,dataFmen)
+```
+
+```{r}
+ts <- seq.POSIXt(as.POSIXct("2012-01-01",'%Y/%m/%d'),
+                 as.POSIXct("2020-07-01",'%Y/%m/%d'), by="month")
+
+ts <- seq.POSIXt(as.POSIXlt("2012-01-01"), as.POSIXlt("2020-07-01"), by="month")
+ts <- format.POSIXct(ts,'%Y/%m/%d')
+
+dfa <- data.frame(timestamp=ts)
+
+
+zero<- matrix(1, 103, 1)
+
+df <- cbind(dfa,zero)
+rm(dfa)
+df$zero[df$zero == 1] <- 0
+
+dataF <- df %>%
+  dplyr::mutate(year = lubridate::year(timestamp), 
+                month = lubridate::month(timestamp), 
+                day = lubridate::day(timestamp))
+dataF$date <-paste(dataF$month, dataF$year, sep="-")
+
+data_F_mensual_cero <- dataF %>% 
+  select(date,zero)%>%
+  group_by(date)%>%
+  summarise(dias=sum(zero))
+
+data_F_mensual_cero$date <- str_pad(data_F_mensual_cero$date,width = 7, side="left", pad = "0")
+
+
+library(zoo)
+data_F_mensual_cero$date <- zoo::as.yearmon(data_F_mensual_cero$date, format = "%m-%Y")
+
+data_F_mensual_cero %>%
+  arrange(date)
+
+rm(dataF,df,dfa)
+
+data_F_mensual$dias[data_F_mensual$dias == 0] <- 28
+
+datos <- rbind(data_F_mensual,data_F_mensual_cero) %>%
+  arrange(date)
+DATO <- datos%>%
+  group_by(date)%>%
+  summarise(valor=sum(dias))%>%
+  select(date,valor)
+rm(data_F_mensual,data_F_mensual_cero,datos)
+```
+```{r}
+df <- DATO %>% 
+  dplyr::mutate(year = lubridate::year(date), 
+                month = lubridate::month(date))%>%
+  arrange(month)
+df$month <- str_pad(df$month, width = 2, side="left", pad = "0")
+df$month2 <- str_sub(df$date,1,3)
+
+```
+
+
+
+
+
+```{r}
+library(tidyquant)
+df %>%
+  ggplot(aes(x = df$month, y = valor, group = year)) +
+  xlab(df$month2) +
+  geom_area(aes(fill = year), position = "stack") +
+  labs(title = "Grafica por mes/año", x = "mes", y = "valor",
+      subtitle = "Valores por mes y año") +
+  scale_y_continuous() +
+  theme_tq()
+
+```
+```{r}
+DATO$fecha <- as.character(DATO$date)
+DATO %<>% 
+  tidyr::separate(fecha, into = c("m", "y"), sep = " ") %>%
+  dplyr::mutate(y = as.numeric(y),
+                m = match(m, month.abb),
+                fechas = lubridate::make_date(y,m)) %>%
+  dplyr::select(-m, -y)
+```
+
+
+
+
+# .- Time-Series
+```{r}
+pas1.ts <- ts(DATO["valor"], start = c(2012, 1), frequency = 12)
+str(pas1.ts)
+```
+```{r}
+pas1.ts
+```
+```{r warning=TRUE}
+autoplot(pas1.ts)
+```
+```{r}
+autoplot(pas1.ts, ts.colour = "red", ts.linetype = "dashed")
+```
+```{r}
+autoplot(pacf(pas1.ts, plot = FALSE))
+```
+```{r}
+autoplot(acf(pas1.ts, plot = FALSE), conf.int.fill = "#0000FF", conf.int.value = 0.8,conf.int.type = "ma")
+```
+```{r}
+autoplot(spec.ar(pas1.ts, plot = FALSE))
+```
+
+
+```{r}
+library(ggfortify)
+#library(zoo)
+library(forecast)
+ggtsdiag(auto.arima(pas1.ts))
+```
+```{r}
+gglagplot(pas1.ts, lags = 4)
+```
+
+
+```{r}
+ggfreqplot(pas1.ts)
+```
+
+```{r}
+ggfreqplot(pas1.ts, freq = 4)
+```
+
+```{r}
+arima1<-forecast::auto.arima(pas1.ts)
+forecast1<-forecast::forecast(arima1,level = c(95), h = 50)
+autoplot(forecast1)
+```
+
+```{r}
+autoplot(forecast1, ts.colour = "firebrick1", predict.colour = "red",
+         predict.linetype = "dashed", conf.int = FALSE)
+```
+
+```{r}
+forecast::ggseasonplot(pas1.ts, year.labels=TRUE, year.labels.left=TRUE)
+
+```
+
+
+
+```{r}
+forecast::ggseasonplot(pas1.ts, year.labels=TRUE, year.labels.left=TRUE, polar = TRUE)
+```
+## .-  Ruido Gaussiano linealmente dependiente en el tiempo
+```{r}
+alpha <- 1
+beta <- 0.1
+t <- 1:103
+mu <- alpha + beta*t
+
+fit <- lm(pas1.ts ~ t)     #calcula la regresión  lm=modelo lineal
+summary(fit)    #slow y el interceptro   y=ax+b
+```
+```{r}
+plot(fit)
+```
+```{r}
+dplyr::tibble(time = t, value = pas1.ts) %>%
+  ggplot2::ggplot(ggplot2::aes(x = time, y = value)) +
+  ggplot2::geom_line() +
+  ggplot2::geom_abline(intercept = fit$coefficients[1], slope = fit$coefficients[2], col = "red")   #quiero calcular la lina roja con una regresión
+```
+
+```{r}
+# SOI= LA SERIE TEMPORAL
+
+soi.lag6 <- xts::lag.xts(pas1.ts,6)  # desplazar una serie temporal 6 veces, con lo que x1 es igual a y7, x2 igual a y8, x3 igual a y9....
+fit <- lm(pas1.ts ~ soi.lag6)    # esta es la relación que hace
+summary(fit)
+```
+
+```{r}
+dplyr::tibble(time = zoo::index(pas1.ts), 
+              actual = zoo::coredata(pas1.ts),
+              estimated = c(rep(0,6),fit$fitted.values)) %>%
+  tidyr::gather(pas1.ts, Value, -time) %>%
+  ggplot2::ggplot(ggplot2::aes(x = time, y = Value, col = pas1.ts)) +
+  ggplot2::geom_line()
+```
+```{r}
+plot(fit)
+```
+
+```{r}
+# library(reshape2)
+meltdf <- reshape2::melt(DATO,id="date")
+ggplot(meltdf,aes(x=date,y=value,colour=variable,group=variable)) + geom_line()
+```
+## .- tslm rewritten
+```{r}
+# autoplot of a forecast object
+fc <- forecast::forecast(pas1.ts)
+autoplot(fc)
+```
+
+```{r}
+# Plotting the components of an ETS model
+fit <- forecast::ets(pas1.ts)
+autoplot(fit)
+```
+
+```{r}
+# Plotting the inverse characteristic roots of an ARIMA model
+fit <- forecast::auto.arima(pas1.ts, D=1)
+autoplot(fit)
+```
+```{r}
+ggtsdisplay(pas1.ts)
+```
+
+```{r}
+ggseasonplot(pas1.ts)
+```
+```{r}
+menst.lm  <- tslm(pas1.ts ~ trend + fourier(pas1.ts,3))
+menst.fcast <- forecast(menst.lm,
+    data.frame(fourier(pas1.ts,3,36)))
+autoplot(menst.fcast)
+```
+
+```{r}
+# camio los nombres de las columnas
+names(DF)<-c("ds","y")
+# sustituyo los valores 1 por 0
+DF$y[DF$y == 1] <- 0
+# incluyo un valor
+DATO <-DF%>%
+  mutate(y = replace(y, ds=="2012-09-09", 29))
+
+DATO <-DATO%>%
+  mutate(y = replace(y, ds=="2020-06-11", 29))
+
+DATO <-DATO%>%
+  mutate(ds = replace(ds, ds=="2020-06-11", "2020-07-10"))
+  
+DF <- DATO %>%
+  filter(y>10)
+```
+```{r}
+summary(DF)
+# Calculo la moda
+modeest::mfv(DF$y)
+```
+```{r eval=FALSE, include=FALSE}
+DF_NEW <-DF%>%
+  dplyr::filter(y>60)%>%
+  mutate(multiplo = y/29)
+
+
+l = list()
+for (i in 1:length(DF_NEW$ds))
+{
+  print(i)
+  row <- DF_NEW[i,]
+  date <- row[[1]]
+  multiplo <- round(row[[4]])
+  for (j in 1:multiplo)
+  {
+    date <- date - 29
+    l<-c(l, date)
+  }
+}
+
+ls <- as.Date.numeric(l)
+```
+
+
+
+```{r}
+m= prophet::prophet(DF)
+m
+# creamos el data.frame de base para el forecast con la función, incluida en el paquete, llamada make_future_dataframe. Y finalmente, usando la función genérica predict calculamos nuestro forecast.
+future_df_prophet <- prophet::make_future_dataframe(m, periods = 24, freq = "months")
+forecast <- predict(m, future_df_prophet)
+tail(forecast[c("ds", "yhat", "yhat_lower","yhat_upper")], 24) # muestra de las últimas 12 filas de las columnas 1 y 2
+
+# vemos el resultado de la predicción.
+plot(m ,forecast) 
+prophet::prophet_plot_components(m ,forecast)
+
+```
+```{r}
+# Vemos la gráfica de forma interactiva
+prophet::dyplot.prophet(m, forecast)
+```
+
+
+##############################333
+
+# Corregimos los datos
+## Sustituyo los valores outliers por la moda
+```{r}
+# Sustituyo los valores superioes a 200 por la moda
+#library(modeest)
+modeest::mfv(DF$y)
+DF <- DF%>%
+  mutate(y = replace(y, y>200, mfv(DF$y)))%>%
+  filter(y<200 & y>1)
+ #Indica el o los valores con más frecuencia
+```
+```{r}
+m= prophet::prophet(DF)
+m
+# creamos el data.frame de base para el forecast con la función, incluida en el paquete, llamada make_future_dataframe. Y finalmente, usando la función genérica predict calculamos nuestro forecast.
+future_df_prophet <- prophet::make_future_dataframe(m, periods = 24, freq = "months")
+forecast <- predict(m, future_df_prophet)
+tail(forecast[c("ds", "yhat", "yhat_lower","yhat_upper")], 24) # muestra de las últimas 12 filas de las columnas 1 y 2
+
+# vemos el resultado de la predicción.
+plot(m ,forecast) 
+prophet::prophet_plot_components(m ,forecast)
+# Vemos la gráfica de forma interactiva
+prophet::dyplot.prophet(m, forecast)
+```
+## Cubro el gap con la predicción del 2015
+```{r}
+DF_1 <- DF%>%
+  filter(ds>"2012-09-01" & ds<"2016-03-01")
+```
+```{r}
+m= prophet::prophet(DF_1)
+m
+# creamos el data.frame de base para el forecast con la función, incluida en el paquete, llamada make_future_dataframe. Y finalmente, usando la función genérica predict calculamos nuestro forecast.
+future_df_prophet <- prophet::make_future_dataframe(m, periods = 24, freq = "months")
+forecast <- predict(m, future_df_prophet)
+tail(forecast[c("ds", "yhat", "yhat_lower","yhat_upper")], 24) # muestra de las últimas 12 filas de las columnas 1 y 2
+
+# vemos el resultado de la predicción.
+plot(m ,forecast) 
+prophet::prophet_plot_components(m ,forecast)
+# Vemos la gráfica de forma interactiva
+prophet::dyplot.prophet(m, forecast)
+```
+```{r}
+# Genero un dataset
+prev_1<- data.frame(forecast$ds,forecast$yhat)
+colnames(prev_1)<- c("ds", "y")
+
+add_gap <- prev_1 %>%
+  dplyr::filter(ds>"2016-06-01" & ds<"2017-03-01")
+```
+```{r}
+DF_cumpli <- rbind(DF, add_gap)%>%
+  arrange(ds)
+```
+```{r}
+m= prophet::prophet(DF_cumpli)
+m
+# creamos el data.frame de base para el forecast con la función, incluida en el paquete, llamada make_future_dataframe. Y finalmente, usando la función genérica predict calculamos nuestro forecast.
+future_df_prophet <- prophet::make_future_dataframe(m, periods = 24, freq = "months")
+forecast <- predict(m, future_df_prophet)
+tail(forecast[c("ds", "yhat", "yhat_lower","yhat_upper")], 24) # muestra de las últimas 12 filas de las columnas 1 y 2
+
+# vemos el resultado de la predicción.
+plot(m ,forecast) 
+prophet::prophet_plot_components(m ,forecast)
+# Vemos la gráfica de forma interactiva
+prophet::dyplot.prophet(m, forecast)
+```
+```{r}
+DF_2 <- DF_cumpli%>%
+  filter(ds>"2012-09-01" & ds<"2017-03-22")
+```
+```{r}
+m= prophet::prophet(DF_2)
+m
+# creamos el data.frame de base para el forecast con la función, incluida en el paquete, llamada make_future_dataframe. Y finalmente, usando la función genérica predict calculamos nuestro forecast.
+future_df_prophet <- prophet::make_future_dataframe(m, periods = 24, freq = "months")
+forecast <- predict(m, future_df_prophet)
+tail(forecast[c("ds", "yhat", "yhat_lower","yhat_upper")], 24) # muestra de las últimas 12 filas de las columnas 1 y 2
+
+# vemos el resultado de la predicción.
+plot(m ,forecast) 
+prophet::prophet_plot_components(m ,forecast)
+# Vemos la gráfica de forma interactiva
+prophet::dyplot.prophet(m, forecast)
+```
+```{r}
+# Genero un dataset
+prev_2<- data.frame(forecast$ds,forecast$yhat)
+colnames(prev_2)<- c("ds", "y")
+
+add_gap2 <- prev_2 %>%
+  dplyr::filter(ds>"2017-03-02" & ds<"2017-12-01")
+```
+```{r}
+DF_cumplido <- rbind(DF_cumpli, add_gap2)%>%
+  arrange(ds)
+```
+
+
+```{r}
+DF_cumplido <- data.frame(DF_cumplido)
+boxplot(DF_cumplido$y)
+```
+```{r}
+# sustituimos los outliers por la media
+mean(DF_cumplido$y)
+# reemplazo de outliers con R
+outliersReplace <- function(data, lowLimit, highLimit){
+  data[data < lowLimit] <- mean(data)
+  data[data > highLimit] <- median(data)
+  data     #devolvemos el dato       
+}
+ 
+DF_cumplido$ys <- outliersReplace(DF_cumplido$y, 20, 60)
+```
+```{r}
+
+par(mfrow = c(1,2))
+ 
+boxplot(DF_cumplido$y, main = "Sin reemplazo de outliers con R")
+boxplot(DF_cumplido$ys, main = "Con reemplazo de outliers con R")
+```
+```{r}
+DF_cumplido <- DF_cumplido%>%
+  select(ds,ys)
+
+colnames(DF_cumplido) <- c("ds","y")
+```
+
+
+```{r}
+m= prophet::prophet(DF_cumplido)
+m
+# creamos el data.frame de base para el forecast con la función, incluida en el paquete, llamada make_future_dataframe. Y finalmente, usando la función genérica predict calculamos nuestro forecast.
+future_df_prophet <- prophet::make_future_dataframe(m, periods =1, freq = "months")
+forecast <- predict(m, future_df_prophet)
+tail(forecast[c("ds", "yhat", "yhat_lower","yhat_upper")], 1) # muestra de las últimas 12 filas de las columnas 1 y 2
+
+# vemos el resultado de la predicción.
+plot(m ,forecast) 
+prophet::prophet_plot_components(m ,forecast)
+# Vemos la gráfica de forma interactiva
+prophet::dyplot.prophet(m, forecast)
+```
+

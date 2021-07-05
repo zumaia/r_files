@@ -1,0 +1,7 @@
+"0","data %>%"
+"0","  dplyr::select(fecha, muertes_zymotic_anual, muertes_heridas_anual, muertes_otras_anual) %>%"
+"0","  tidyr::gather(muertes_tipo, muertes_valor, -fecha) %>%"
+"0","  ggplot2::ggplot(ggplot2::aes(x = fecha, y = muertes_valor, col = muertes_tipo)) +"
+"0","  ggplot2::geom_line() +"
+"0","  ggplot2::geom_point() +"
+"0","  ggplot2::scale_y_log10()"

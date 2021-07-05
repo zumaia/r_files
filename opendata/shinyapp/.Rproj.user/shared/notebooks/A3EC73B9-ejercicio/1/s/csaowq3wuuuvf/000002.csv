@@ -1,0 +1,3 @@
+"0","# Convert na to 0"
+"0","total[is.na(total)] <- 0"
+"0","# "

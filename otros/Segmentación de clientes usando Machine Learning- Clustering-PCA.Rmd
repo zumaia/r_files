@@ -1,0 +1,360 @@
+---
+title: "Data Science Project – Customer Segmentation using Machine Learning in R"
+output: html_document
+---
+
+# enlace: https://data-flair.training/blogs/r-data-science-project-customer-segmentation/
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+
+# Limpieza y preparación entorno trabajo
+
+```{r Limpieza y preparación}
+# Limpiamos el entorno de Trabajo
+rm(list=ls())
+
+# Limpiamos la consola
+cat("\014")
+
+# Comprobamos que está bien establecido el directorio
+getwd()
+dir()
+```
+```{r Directorio de trabajo}
+#indicamos el directorio de trabajo
+setwd("~/Documentos/R")
+```
+# Carga de librerias
+```{r Carga Librerias}
+
+packages <- c("tidyverse", "plotrix", "NbClust", "factoextra")
+newpack  = packages[!(packages %in% installed.packages()[,"Package"])]
+
+if(length(newpack)) install.packages(newpack)
+a=lapply(packages, library, character.only=TRUE)
+```
+
+En esta serie de proyectos de ciencias de la información, realizaremos una de las aplicaciones más esenciales del aprendizaje por máquina: la segmentación de clientes. En este proyecto, implementaremos la segmentación de clientes en R. Siempre que necesite encontrar su mejor cliente, la segmentación de clientes es la metodología ideal.
+
+En este proyecto de aprendizaje automático, DataFlair le proporcionará los antecedentes de la segmentación de clientes. Luego exploraremos los datos sobre los que construiremos nuestro modelo de segmentación. También, en este proyecto de ciencia de datos, veremos el análisis descriptivo de nuestros datos y luego implementaremos varias versiones del algoritmo K-means. Así que, sigue el proyecto completo de segmentación de clientes de ciencia de datos usando el aprendizaje automático en R y conviértete en un profesional de la ciencia de datos.
+
+# Proyecto de Segmentación de Clientes en R
+
+La segmentación de clientes es una de las aplicaciones más importantes del aprendizaje no supervisado. Mediante técnicas de agrupación, las empresas pueden identificar los diversos segmentos de clientes, lo que les permite dirigirse a la base de usuarios potenciales. En este proyecto de aprendizaje automático, haremos uso de la agrupación de K-means, que es el algoritmo esencial para agrupar el conjunto de datos no etiquetados. Antes de avanzar en este proyecto, aprenderemos lo que realmente es la segmentación de clientes.
+
+# ¿Qué es la segmentación de clientes?
+
+La segmentación de clientes es el proceso de división de la base de clientes en varios grupos de individuos que comparten una similitud en diferentes formas que son relevantes para la comercialización, tales como el género, la edad, los intereses y los diversos hábitos de gasto.
+
+Las empresas que despliegan la segmentación de clientes tienen la idea de que cada cliente tiene diferentes requisitos y requieren un esfuerzo de marketing específico para abordarlos adecuadamente. Las empresas pretenden obtener un enfoque más profundo del cliente al que se dirigen. Por lo tanto, su objetivo tiene que ser específico y debe ser adaptado para atender las necesidades de todos y cada uno de los clientes. Además, gracias a los datos reunidos, las empresas pueden comprender mejor las preferencias de los clientes, así como los requisitos para descubrir segmentos valiosos que les permitan obtener el máximo beneficio. De esta manera, pueden elaborar estrategias de comercialización más eficaces y reducir al mínimo la posibilidad de riesgo para su inversión.
+
+La técnica de segmentación de clientes depende de varios diferenciadores clave que dividen a los clientes en grupos a los que hay que dirigirse. Los datos relacionados con la demografía, la geografía, el estatus económico, así como los patrones de comportamiento juegan un papel crucial en la determinación de la dirección de la empresa hacia la dirección de los diversos segmentos.
+
+Puede descargar el conjunto de datos para el proyecto de segmentación de clientes aquí (https://drive.google.com/file/d/19BOhwz52NUY3dg8XErVYglctpr5sjTy4/view). 
+
+# ¿Cómo implementar la segmentación de clientes en R?
+
+En el primer paso de este proyecto de ciencia de datos, realizaremos la exploración de datos. Importaremos los paquetes esenciales requeridos para este papel y luego leeremos nuestros datos. Finalmente, revisaremos los datos de entrada para obtener los conocimientos necesarios sobre ellos.
+
+
+# Código:
+```{r}
+customer_data=read.csv("datos/Mall_Customers.csv")
+str(customer_data)
+names(customer_data)
+```
+Ahora mostraremos las primeras seis filas de nuestro conjunto de datos usando la función head() y usaremos la función summary() para obtener un resumen del mismo.
+
+```{r}
+    head(customer_data)
+    summary(customer_data$Age)
+    
+
+```
+
+```{r}
+    sd(customer_data$Age)
+    summary(customer_data$Annual.Income..k..)
+    sd(customer_data$Annual.Income..k..)
+    summary(customer_data$Age)
+```
+
+```{r}
+    sd(customer_data$Spending.Score..1.100.)
+```
+
+# Visualización del género del cliente
+
+En esto, crearemos una gráfica de barras y un gráfico para mostrar la distribución de género en nuestro conjunto de datos customer_data.
+```{r}
+    a=table(customer_data$Gender)
+    barplot(a,main="Using BarPlot to display Gender Comparision",
+           ylab="Count",
+           xlab="Gender",
+           col=rainbow(2),
+           legend=rownames(a))
+```
+En el gráfico de barras de arriba, observamos que el número de hembras es mayor que el de machos. Ahora, visualicemos un gráfico circular para observar la proporción de la distribución de machos y hembras.
+
+```{r}
+pct=round(a/sum(a)*100)
+lbs=paste(c("Female","Male")," ",pct,"%",sep=" ")
+    # library(plotrix)
+pie3D(a,labels=lbs, main="Pie Chart Depicting Ratio of Female and Male")
+```
+Del gráfico anterior, concluimos que el porcentaje de mujeres es del 56%, mientras que el porcentaje de hombres en el conjunto de datos del cliente es del 44%.
+
+# Visualización de la distribución de edades
+
+Hagamos un histograma para ver la distribución para trazar la frecuencia de las edades de los clientes. Procederemos primero tomando un resumen de la variable de la edad.
+
+```{r}
+    summary(customer_data$Age)
+```
+
+
+```{r}
+    hist(customer_data$Age,
+        col="blue",
+        main="Histogram to Show Count of Age Class",
+        xlab="Age Class",
+        ylab="Frequency",
+        labels=TRUE)
+
+boxplot(customer_data$Age, col="666666", main="Boxplot for Descriptive Analysis of Age")
+```
+De las dos visualizaciones anteriores, concluimos que las edades máximas de los clientes están entre 30 y 35 años. La edad mínima de los clientes es de 18 años, mientras que la edad máxima es de 70.
+
+
+# Análisis de los ingresos anuales de los clientes
+
+En esta sección del proyecto R, crearemos visualizaciones para analizar los ingresos anuales de los clientes. Trazaremos un histograma y luego procederemos a examinar estos datos utilizando un gráfico de densidad.
+
+```{r}
+    summary(customer_data$Annual.Income..k..)
+    hist(customer_data$Annual.Income..k..,
+      col="#660033",
+      main="Histogram for Annual Income",
+      xlab="Annual Income Class",
+      ylab="Frequency",
+      labels=TRUE)
+    
+    plot(density(customer_data$Annual.Income..k..),
+        col="yellow",
+        main="Density Plot for Annual Income",
+        xlab="Annual Income Class",
+        ylab="Density")
+    polygon(density(customer_data$Annual.Income..k..),
+            col="#ccff66")
+```
+Del análisis descriptivo anterior, concluimos que el ingreso mínimo anual de los clientes es de 15 y el máximo de 137. Las personas que ganan un ingreso promedio de 70 tienen la cuenta de frecuencia más alta en nuestra distribución del histograma. El salario medio de todos los clientes es de 60,56. En el diagrama de densidad del núcleo que mostramos arriba, observamos que el ingreso anual tiene una distribución normal.
+
+# Analizando el puntaje de gastos de los clientes
+
+```{r}
+    summary(customer_data$Spending.Score..1.100.)
+   
+    boxplot(customer_data$Spending.Score..1.100.,
+       horizontal=TRUE,
+       col="#990000",
+       main="BoxPlot for Descriptive Analysis of Spending Score")
+    
+    hist(customer_data$Spending.Score..1.100.,
+        main="HistoGram for Spending Score",
+        xlab="Spending Score Class",
+        ylab="Frequency",
+        col="#6600cc",
+        labels=TRUE)
+```
+La puntuación mínima de gasto es 1, la máxima es 99 y el promedio es 50.20. Podemos ver que el análisis descriptivo del puntaje de gasto es que el mínimo es 1, el máximo es 99 y el promedio es 50.20. Del histograma, concluimos que los clientes entre la clase 40 y 50 tienen la mayor puntuación de gasto de todas las clases.
+
+# Algoritmo K-means
+
+Si bien se utiliza el algoritmo de agrupación k-means, el primer paso es indicar el número de agrupaciones (k) que deseamos producir en el resultado final. El algoritmo comienza seleccionando al azar objetos k del conjunto de datos que servirán como centros iniciales para nuestros cúmulos. Estos objetos seleccionados son los medios del cúmulo, también conocidos como centros. Luego, los objetos restantes tienen una asignación del centroide más cercano. Este centroide está definido por la distancia euclidiana presente entre el objeto y la media del cúmulo. Nos referimos a este paso como "asignación del cúmulo". Cuando la asignación se completa, el algoritmo procede a calcular el nuevo valor medio de cada cúmulo presente en los datos. Después del recálculo de los centros, se comprueba si las observaciones están más cerca de un cúmulo diferente. Utilizando la media del cluster actualizada, los objetos se someten a una reasignación. Esto continúa repetidamente a través de varias iteraciones hasta que las asignaciones de los clústeres dejan de alterarse. Los cúmulos presentes en la iteración actual son los mismos que los obtenidos en la iteración anterior.
+
+# Resumiendo la agrupación de los medios K -
+
+    Especificamos el número de cúmulos que necesitamos crear.
+    El algoritmo selecciona k objetos al azar del conjunto de datos. Este objeto es el cúmulo inicial o media.
+    El centroide más cercano obtiene la asignación de una nueva observación. Basamos esta asignación en la distancia euclidiana entre el objeto y el centroide.
+    k cúmulos en los puntos de datos actualizan el centroide a través del cálculo de los nuevos valores medios presentes en todos los puntos de datos del cúmulo. El centroide del cúmulo k-ésimo tiene una longitud de p que contiene las medias de todas las variables para las observaciones en el cúmulo k-ésimo. Denotamos el número de variables con p.
+    Minimización iterativa del total dentro de la suma de los cuadrados. Entonces a través de la minimización iterativa de la suma total del cuadrado, la asignación deja de vacilar cuando alcanzamos la máxima iteración. El valor por defecto es 10 que el software R utiliza para las iteraciones máximas.
+
+# Determinación de los cúmulos óptimos
+
+Cuando se trabaja con grupos, es necesario especificar el número de grupos a utilizar. Le gustaría utilizar el número óptimo de clusters. Para ayudarle a determinar los grupos óptimos, hay tres métodos populares -
+
+    Método del codo
+    Método de la silueta
+    Estadística de la brecha
+
+# Método del codo
+
+El objetivo principal de los métodos de partición de cúmulos, como los k-means, es definir los cúmulos de manera que la variación intracúmulo sea mínima.
+
+  minimizar(sumar W(Ck)), k=1...k
+
+Donde Ck representa el kth cluster y W(Ck) denota la variación intra-cluster. Con la medición de la variación total intra-cluster, se puede evaluar la compacidad de la frontera del cluster. Podemos entonces proceder a definir los clústeres óptimos de la siguiente manera -
+
+En primer lugar, calculamos el algoritmo de agrupación para varios valores de k. Esto puede hacerse creando una variación dentro de k de 1 a 10 agrupaciones. Luego calculamos la suma total intracúmulo del cuadrado (iss). Luego, procedemos a trazar iss basado en el número de cúmulos de k. Esta gráfica denota el número apropiado de cúmulos requeridos en nuestro modelo. En el gráfico, la ubicación de una curva o una rodilla es la indicación del número óptimo de clusters. Vamos a implementar esto en R de la siguiente manera -
+
+```{r}
+    library(purrr)
+    set.seed(123)
+    # function to calculate total intra-cluster sum of square 
+    iss <- function(k) {
+      kmeans(customer_data[,3:5],k,iter.max=100,nstart=100,algorithm="Lloyd" )$tot.withinss
+    }
+    k.values <- 1:10
+    iss_values <- map_dbl(k.values, iss)
+    plot(k.values, iss_values,
+        type="b", pch = 19, frame = FALSE, 
+        xlab="Number of clusters K",
+        ylab="Total intra-clusters sum of squares")
+```
+Del gráfico anterior, concluimos que 4 es el número apropiado de cúmulos, ya que parece estar apareciendo en la curva del codo.
+
+M# étodo de la silueta media
+
+Con la ayuda del método de la silueta media, podemos medir la calidad de nuestra operación de agrupación. Con esto, podemos determinar cuán bien dentro del cúmulo está el objeto de datos. Si obtenemos un alto promedio de ancho de silueta, significa que tenemos una buena agrupación. El método de la silueta media calcula la media de las observaciones de la silueta para diferentes valores de k. Con el número óptimo de cúmulos k, se puede maximizar la silueta promedio sobre los valores significativos para los cúmulos k.
+
+Usando la función de silueta en el paquete de cúmulos, podemos calcular la media de la anchura de la silueta usando la función kmean. Aquí, el cúmulo óptimo poseerá el promedio más alto.
+
+```{r}
+    library(cluster) 
+    library(gridExtra)
+    library(grid)
+    k2<-kmeans(customer_data[,3:5],2,iter.max=100,nstart=50,algorithm="Lloyd")
+    s2<-plot(silhouette(k2$cluster,dist(customer_data[,3:5],"euclidean")))
+    
+    k3<-kmeans(customer_data[,3:5],3,iter.max=100,nstart=50,algorithm="Lloyd")
+    s3<-plot(silhouette(k3$cluster,dist(customer_data[,3:5],"euclidean")))
+    
+    k4<-kmeans(customer_data[,3:5],4,iter.max=100,nstart=50,algorithm="Lloyd")
+    s4<-plot(silhouette(k4$cluster,dist(customer_data[,3:5],"euclidean")))
+    
+    k5<-kmeans(customer_data[,3:5],5,iter.max=100,nstart=50,algorithm="Lloyd")
+    s5<-plot(silhouette(k5$cluster,dist(customer_data[,3:5],"euclidean")))
+    
+    k6<-kmeans(customer_data[,3:5],6,iter.max=100,nstart=50,algorithm="Lloyd")
+    s6<-plot(silhouette(k6$cluster,dist(customer_data[,3:5],"euclidean")))
+    
+    k7<-kmeans(customer_data[,3:5],7,iter.max=100,nstart=50,algorithm="Lloyd")
+    s7<-plot(silhouette(k7$cluster,dist(customer_data[,3:5],"euclidean")))
+    
+    k8<-kmeans(customer_data[,3:5],8,iter.max=100,nstart=50,algorithm="Lloyd")
+    s8<-plot(silhouette(k8$cluster,dist(customer_data[,3:5],"euclidean")))
+    
+    k9<-kmeans(customer_data[,3:5],9,iter.max=100,nstart=50,algorithm="Lloyd")
+    s9<-plot(silhouette(k9$cluster,dist(customer_data[,3:5],"euclidean")))
+    
+    k10<-kmeans(customer_data[,3:5],10,iter.max=100,nstart=50,algorithm="Lloyd")
+    s10<-plot(silhouette(k10$cluster,dist(customer_data[,3:5],"euclidean")))
+```
+Ahora, hacemos uso de la función fviz_nbclust() para determinar y visualizar el número óptimo de cúmulos de la siguiente manera -
+
+```{r}
+    library(NbClust)
+    library(factoextra)
+    fviz_nbclust(customer_data[,3:5], kmeans, method = "silhouette")
+```
+# Método estadístico de la brecha
+
+En 2001, los investigadores de la Universidad de Stanford - R. Tibshirani, G.Walther y T. Hastie publicaron el Gap Statistic Method. Podemos usar este método para cualquiera de los métodos de agrupación como K-means, agrupación jerárquica, etc. Utilizando la estadística de la brecha, se puede comparar la variación total intracluster para diferentes valores de k junto con sus valores esperados bajo la distribución de referencia nula de los datos. Con la ayuda de las simulaciones de Monte Carlo, se puede producir el conjunto de datos de la muestra. Para cada variable del conjunto de datos, podemos calcular el rango entre min(xi) y max (xj) a través del cual podemos producir valores uniformemente desde el límite inferior del intervalo hasta el límite superior.
+
+Para calcular el método de estadística de la brecha podemos utilizar la función clusGap para proporcionar la estadística de la brecha, así como el error estándar para un resultado determinado.
+
+```{r}
+    set.seed(125)
+    stat_gap <- clusGap(customer_data[,3:5], FUN = kmeans, nstart = 25,
+                K.max = 10, B = 50)
+    fviz_gap_stat(stat_gap)
+```
+Ahora, tomemos k = 6 como nuestro grupo óptimo -
+```{r}
+    k6<-kmeans(customer_data[,3:5],6,iter.max=100,nstart=50,algorithm="Lloyd")
+    k6
+```
+En el resultado de nuestra operación de kmeans, observamos una lista con varias informaciones clave. A partir de esto, concluimos que la información útil es...
+
+    cúmulo - Es un vector de varios enteros que denotan el cúmulo que tiene una asignación de cada punto.
+    totss - Esto representa la suma total de los cuadrados.
+    centros - Matriz que comprende varios centros de cúmulos
+    withinss - Este es un vector que representa la suma intracluster de los cuadrados que tienen un componente por cluster.
+    tot.withinss - Esto denota la suma total de cuadrados intra-cluster.
+    betweenss - Es la suma de los cuadrados entre los clusters.
+    size - El número total de puntos que cada cluster tiene.
+
+# Visualización de los resultados de los clusters usando los dos primeros componentes principales
+
+```{r}
+    pcclust=prcomp(customer_data[,3:5],scale=FALSE) #principal component analysis
+    summary(pcclust)
+
+```
+```{r}
+    pcclust$rotation[,1:2]
+```
+```{r}
+    set.seed(1)
+    ggplot(customer_data, aes(x =Annual.Income..k.., y = Spending.Score..1.100.)) + 
+      geom_point(stat = "identity", aes(color = as.factor(k6$cluster))) +
+      scale_color_discrete(name=" ",
+                  breaks=c("1", "2", "3", "4", "5","6"),
+                  labels=c("Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4", "Cluster 5","Cluster 6")) +
+      ggtitle("Segments of Mall Customers", subtitle = "Using K-means Clustering")
+```
+De la visualización anterior, observamos que hay una distribución de 6 cúmulos como sigue -
+
+Grupo 6 y 4 - Estos grupos representan los datos de los clientes con el salario de ingresos medios, así como el gasto medio anual del salario.
+
+Grupo 1 - Este grupo representa los datos de los clientes con un alto ingreso anual, así como un alto gasto anual.
+
+Grupo 3 - Este grupo representa los datos de los clientes con bajos ingresos anuales, así como un bajo gasto anual de ingresos.
+
+Grupo 2 - Este grupo denota un alto ingreso anual y un bajo gasto anual.
+
+Grupo 5 - Este grupo representa un ingreso anual bajo pero un gasto anual alto.
+
+```{r}
+    ggplot(customer_data, aes(x =Spending.Score..1.100., y =Age)) + 
+      geom_point(stat = "identity", aes(color = as.factor(k6$cluster))) +
+      scale_color_discrete(name=" ",
+                          breaks=c("1", "2", "3", "4", "5","6"),
+                          labels=c("Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4", "Cluster 5","Cluster 6")) +
+      ggtitle("Segments of Mall Customers", subtitle = "Using K-means Clustering")
+
+
+```
+```{r}
+    kCols=function(vec){cols=rainbow (length (unique (vec)))
+    return (cols[as.numeric(as.factor(vec))])}
+    digCluster<-k6$cluster; dignm<-as.character(digCluster); # K-means clusters
+    plot(pcclust$x[,1:2], col =kCols(digCluster),pch =19,xlab ="K-means",ylab="classes")
+    legend("bottomleft",unique(dignm),fill=unique(kCols(digCluster)))
+```
+
+Grupo 4 y 1 - Estos dos grupos están formados por clientes con una puntuación media de PCA1 y PCA2.
+
+Grupo 6 - Este grupo representa a los clientes que tienen un PCA2 alto y un PCA1 bajo.
+
+Grupo 5 - En este grupo, hay clientes con un PCA1 medio y un PCA2 bajo.
+
+Grupo 3 - Este grupo está formado por clientes con un alto ingreso de PCA1 y un alto PCA2.
+
+Grupo 2 - Este grupo está formado por clientes con un alto PCA2 y un gasto anual medio de ingresos.
+
+Con la ayuda de la agrupación, podemos entender las variables mucho mejor, lo que nos lleva a tomar decisiones cuidadosas. Con la identificación de los clientes, las empresas pueden lanzar productos y servicios que se dirigen a los clientes en base a varios parámetros como los ingresos, la edad, los patrones de gasto, etc. Además, se tienen en cuenta patrones más complejos como las revisiones de productos para una mejor segmentación.
+
+
+# Resumen
+
+En este proyecto de ciencia de los datos, pasamos por el modelo de segmentación de clientes. Lo desarrollamos usando una clase de aprendizaje automático conocido como aprendizaje no supervisado. Específicamente, hicimos uso de un algoritmo de agrupación llamado agrupación de K-means. Analizamos y visualizamos los datos y luego procedimos a implementar nuestro algoritmo. Espero que hayan disfrutado de este proyecto de segmentación de clientes de aprendizaje automático usando R.
+

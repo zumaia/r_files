@@ -1,0 +1,4 @@
+"0","packages <- c(""dplyr"", ""tidyr"", ""skimr"", ""lubridate"", ""ggplot2"", 'purrr')"
+"0","new <- packages[!(packages %in% installed.packages()[,""Package""])]"
+"0","if(length(new)) install.packages(new)"
+"0","a=lapply(packages, require, character.only=TRUE)"

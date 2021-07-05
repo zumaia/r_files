@@ -1,0 +1,95 @@
+---
+title: "My R Markdown Notebook"
+author: 
+    - Rahul Bhadani^[The University of Arizona, rahulbhadani@email.arizona.edu]
+date: "`r format(Sys.time(), '%d %B %Y')`"
+bibliography: citations.bib
+output:
+  
+  html_notebook: default
+  html_document:
+    df_print: paged
+  pdf_document:
+    citation_package: natbib
+    keep_tex: yes
+    number_sections: yes
+classoption:
+- onecolumn
+header-includes:
+- \usepackage[none]{hyphenat}
+- \usepackage{physics}
+- \graphicspath{ {figures/} }
+- \usepackage{color}
+- \definecolor{ocre}{RGB}{243,102,25}
+- \usepackage[font={color=ocre,bf},labelfont=bf]{caption}
+- \usepackage{hyperref}
+- \hypersetup{colorlinks=true,citecolor=blue}
+- \def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+keep_tex: yes
+abstract: This is my abstract
+---
+https://towardsdatascience.com/powerful-r-markdown-for-python-users-f20607f24f08
+
+Using R Markdown to generate rich PDFs
+R Markdown uses knitr, which is a dynamic report generation engine for the R language. It can generate a fully reproducible notebook in multiple formats such as PDF and HTML. Knitr engine incorporates various languages such as R, Python, Bash, and SQL. For this article, I am limiting myself to Python and Bash.
+To appreciate the article fully and follow along, please install R Studio and R. I am using Ubuntu OS for my examples. However, all examples should work with Windows or Mac with some extra steps that I won’t go into detail about in this article.
+Generating LaTeX Doc
+Once you have installed R language and R Studio, click to create a new R Notebook.
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+library(reticulate)
+use_condaenv("r-reticulate")
+#py_install("pandas", pip = TRUE)
+py_module_available("pandas")
+#py_install("seaborn", pip = TRUE)
+py_module_available("seaborn")
+```
+
+```{r, echo=T,eval=T,warning=FALSE, fig.height = 4, fig.width = 5}
+library('nloptr')
+hn <- function(x, n)
+{
+    hret <- 0
+    if (n == 0)
+    {
+       hret <- x + 2*x
+    }
+    else
+    {
+       hret <- x - 2*x
+    }
+    return (hret)
+}
+```
+```{python}
+libraimport pandas as pd
+import seaborn as sns
+iris = sns.load_dataset('iris')
+iris.head()
+iris['sepal_length'].plot()
+```
+Adding Python code in R Markdown
+To add python code to the R Markdown file, add the following code snippets:
+
+With engine.path , I am specifying where to look for a python executable to run the python code snippet. Upon running the above code, I can see the following content in my PDF file:
+
+```{python, engine.path =  "/home/oscar/.local/share/r-miniconda/envs/r-reticulate/bin/conda-env", fig.height = 3, fig.width = 6}
+import pandas as pd
+import seaborn as sns
+iris = sns.load_dataset('iris')
+iris.head()
+iris['sepal_length'].plot()
+```
+
+Executing bash commands in R Markdown
+To execute a bash command, you will need to add the following code snippet:
+```{bash, engine.opts='-l'}
+source ~/.bashrc
+source /opt/ros/melodic/setup.bash
+source ~/catkin_ws/devel/setup.bash
+pwd
+ls
+```

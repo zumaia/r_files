@@ -1,0 +1,527 @@
+library(shiny)
+library(dplyr)
+library(magrittr)
+library(shinydashboard)
+library(DT)
+library(ggplot2)
+library(reshape2)
+library(shinymaterial)
+library(shinyjs)
+
+a <- read.csv('./www/total.csv', header = TRUE)
+
+positions <- c(3:39)
+pos <- c(3:39)
+var <- a %>% select(positions)
+vare <- a %>% select(pos)
+
+# distinguimos variables "a nivel de intervalo" ("continuas" para ggplot)
+nums <- sapply(a, is.numeric)
+continuas <- names(a)[nums]
+
+# y variables "categóricas" ("discretas" para ggplot)
+cats <- sapply(a, is.character)
+categoricas <- names(a)[cats]
+
+#define Min-Max normalization function
+min_max_norm <- function(x) {
+  (x - min(x)) / (max(x) - min(x))
+}
+# Changing the scale of a variable to 0-100
+rescale <- function(x) (x-min(x))/(max(x) - min(x)) * 100
+vare.reescale <- rescale(vare)
+b <- a[1]
+a_vare <- cbind(b,vare)
+
+# eliminamos valores na
+df <- na.omit(a_vare)
+# Poner Nombre como Index
+# Eliminamos NOMBRE DE LA TABLA
+result <- df[-2]
+# Indexamos Nombre
+rownames(result) <- a$barrio
+# Escalar
+df <- scale(result)
+# Semilla
+set.seed(123)
+# Muestra
+ss <- sample(1:18,18) # get the row index of randomly selected 15 rows
+df <- result[ss,] # subset the rows basis this row index
+df.scaled <- scale(df) # Standardise the variable
+dist.eucl <- dist(df.scaled,method="euclidean")
+# ClusteringDistanceMeasures  ########################################################
+round(as.matrix(dist.eucl)[1:15,1:15],1)
+library(factoextra)
+fviz_dist(dist.eucl)
+
+
+stand <- function(x){ (x-mean(x))/sd(x) }              # function to standardise
+toinclude <- c("habitantes.y","renta", "vehi_total", "tasa", "importe.Basura", "est_Tot.UNIVERSITARIOS", "ext_Total" ) # selected variables
+stand_a <- sapply(subset(a, select=toinclude), "stand")       # apply fun
+rownames(stand_a) <- rownames(a)                              # player names
+
+
+ex1_url <- a("text", href="http://www.oscarrojo.com")
+
+ui <- dashboardPage(skin = "blue",
+                    dashboardHeader(title = "OpenData Donostia 2020"),
+                    dashboardSidebar(sidebarMenuOutput("Semi_collapsible_sidebar")
+                                     ),
+                    dashboardBody(
+                        tags$head(tags$style(HTML(
+                            '.myClass { 
+            font-size: 20px;
+            line-height: 50px;
+            text-align: left;
+            font-family: "Helvetica Neue",Helvetica,Arial,sans-serif;
+            padding: 0 15px;
+            overflow: hidden;
+            color: white;
+            }
+            '))),
+                        
+                        tabItems(
+                            tabItem(tabName = "dashboard",
+                                    fluidPage(
+                                        
+                                        tags$head(tags$style(
+                                            HTML('body, label, input, button, select { 
+                                background-color: #fafafa;
+                                     font-family: monospace; }')
+                                        )),
+                                        
+                                        
+                                        fluidRow(
+                                            column(2),
+                                            
+                                            column(4,
+                                                   align = 'center',
+                                                   selectInput(inputId = "p1",
+                                                               label = "",
+                                                               choices = unique(a$barrio),
+                                                               selected = 'AIETE')),
+                                            
+                                            column(4,
+                                                   align = 'center',       
+                                                   selectInput(inputId = "p2",
+                                                               label = "",
+                                                               choices = unique(a$barrio),
+                                                               selected = 'ALTZA')),
+                                            
+                                            column(2)
+                                        ),
+                                        
+                                        fluidRow(
+                                            column(3),
+                                            
+                                            column(6, 
+                                                   style = "font-size: 10px;
+                                       padding: 0px 0px; margin-top:-6em;
+                                       margin-left:12em;", 
+                                                   plotOutput(outputId = "compare")),
+                                            
+                                            column(3)
+                                        ),
+                                        
+                                        fluidRow(
+                                            column(3),
+                                            column(3,
+                                                   align = 'center',
+                                                   style = "margin-top:10em;",
+                                                   tableOutput("profile1")),
+                                            column(3,
+                                                   align = 'center',
+                                                   style = "margin-top:10em;",
+                                                   tableOutput("profile2")),
+                                            column(3)
+                                        )
+                                    )
+                            ),
+                            
+                            tabItem(tabName = "means",
+                                    fluidPage(
+                                        fluidRow(style = "padding-bottom: 20px;",
+                                                 column(4, selectInput('xcol', 'X Variable', names(vare))),
+                                                 column(4, selectInput('ycol', 'Y Variable', names(vare),
+                                                                       selected=names(vare)[[2]]))#,
+                                                 #column(4, numericInput('clusters', 'Cluster count', 4,
+                                                                        #min = 1, max = 9))
+                                        ),
+                                        fluidRow(
+                                            plotOutput('kmeans', height = "400px")  
+                                        )
+                                    )
+                            ),
+                            
+                            tabItem(tabName = "presentation",
+                                    img(src = "laliga.png", height = 100, width = 100, align = 'center'),
+                                    h1("La Liga 2019/2020", align = "center"),
+                                    h2("Creado por Oscar Rojo", align = "center"),
+                                    p(""),
+                                    p(""),
+                                    align = 'center',
+                                    material_button(
+                                        input_id = "button1",
+                                        label = "https://www.linkedin.com/in/oscar-rojo-martin/",
+                                        color = "blue"
+                                    ),
+                                    p(""),
+                                    p(""),
+                                    align = 'left',
+                                    p("Los jugadores de fútbol a lo largo de toda una temporada acumulan una gran cantidad de datos estadisticos. 
+                                    Este proyecto supone la finalización de todo el trabajo relacionado con la Extración, Transformación y Carga
+                                     de datos proporcionados por La Liga y generados a lo largo de toda la temporada 2019/2020."),
+                                    p(""),
+                                    p("Se ha limitado el número de jugadores a los que han jugado más de 2500 minutos durante toda la temporada"),
+                                    p(""),
+                                    p("Este primer apartado describe el proyecto"),
+                                    p("El segundo muestra en una tabla los datos con los que se han trabajado"),
+                                    p("El tercero se realiza un Clustering - Arbol de decisiones"),
+                                    p("El cuarto es otro clustering"),
+                                    p("El quinto es un scatterplot con selección de variables categóricas y númericas"),
+                                    p(""),
+                                    p(""),
+                                    align = 'right',
+                                    h4("Fuente de datos"),
+                                    h3("https://www.laliga.com/"),
+                                    p("")
+                                    
+                            ),
+                            
+                            tabItem(tabName = "cluster",# Sidebar with a slider input for number of observations and checkboxes
+                                    sidebarPanel(
+                                        
+                                        sliderInput("clusters", "Number of clusters:", 
+                                                    min = 2,        # 1 cluster is pointless
+                                                    max = 10,       # too many is too crowded
+                                                    value = 4) ,    # sensible start
+                                        
+                                        helpText("Nota: Esta Shiny App ejecuta la agrupación jerárquica de Ward",
+                                                 "en el conjunto de datos, utilizando una métrica de distancia" ,
+                                                 "euclidiana y versiones estandarizadas de las variables" ,
+                                                 "(es decir, con media=0 sd=1) que seleccione en las casillas",
+                                                 "de verificación de abajo.",
+                                                 "Puedes elegir el número de clusters con el desplazador de arriba.") ,
+                                        checkboxInput("habitantes.x", "habitantes.x",     TRUE) , # as in regression project
+                                        checkboxInput("tasa", "tasa",      FALSE) ,
+                                        checkboxInput("renta", "renta",    FALSE) ,
+                                        checkboxInput("vehi_total","vehi_total",    FALSE) ,
+                                        checkboxInput("importe.I.B.I..urbana", "importe.I.B.I..urbana",   TRUE) , 
+                                        checkboxInput("importe.Basura","importe.Basura",  FALSE)
+ 
+                                    ),
+                             
+                                    # Show a plot of the generated cluster dendrogram
+                                    mainPanel("Cluster Dendograma",
+                                        plotOutput("distPlot", width = "100%")
+                                    ),
+                                    
+                                    
+                                
+                            ),
+                            
+                            
+                            
+                            tabItem(tabName = "charts",
+                                    sidebarPanel( 
+                                        
+                                        selectInput('x', 'Elige variable para eje X', continuas, continuas[[1]]),
+                                        selectInput('y', 'Elige variable para eje Y', continuas, continuas[[2]]),
+                                        selectInput('color', 'CATEGORIAS', c('None', 'barrio', 'GOLES' ,'AMARILLA', 'ROJA', 'DUELOS', 'FALTARECIBIDA', 'FALTACOMETIDA', 'TIROS')),
+                                        
+                                        checkboxInput('lm', 'Línea de Regresión'),
+                                        checkboxInput('smooth', 'Suavizado LOESS'),
+                                        
+                                        selectInput('facet_row', 'Elige variable para facetas por filas', c(None='.', categoricas)),
+                                        downloadButton("descarga", "IMPRIMIR")
+                                    ),
+                                    
+                                    mainPanel(
+                                        plotOutput('charts',
+                                                   height=700)
+                                    )
+                            ),
+                            
+                            tabItem(tabName = "data",
+                                    fluidPage(
+                                        fluidRow(
+                                            column(12,
+                                                   DTOutput('table')
+                                                   )
+                                            )
+                                        )
+                            ),
+                            
+                            tabItem(tabName = "link",
+                                    fluidPage(
+                                        uiOutput("link"),
+                                        h2("http://www.oscarrojo.es/")
+                                        )
+                                    ),
+                            
+                            tabItem(tabName = "link1",
+                                    fluidPage(
+                                        uiOutput("link1"),
+                                        h2("https://www.linkedin.com/in/oscar-rojo-martin/")
+                                    )
+                            ),
+                            
+                            tabItem(tabName = "link2",
+                                    fluidPage(
+                                        uiOutput("link2"),
+                                        h2("https://www.medium.com/@zumaia/")
+                                    )
+                            )
+                        ),
+                        tags$script(HTML('
+      $(document).ready(function() {
+        $("header").find("nav").append(\'<span class="myClass"> Oscar Rojo Martin </span>\');
+      })
+     '))
+                            
+                        
+                        )
+                    )
+
+
+server <- function(input, output){
+    
+    require(ggplot2)
+    require(reshape2)
+    require(dplyr)
+    
+    
+    
+    # Combine the selected variables into a new data frame
+    selectedData <- reactive({
+        vare[, c(input$xcol, input$ycol)]
+    })
+    
+    clusters <- reactive({
+        kmeans(selectedData(), input$clusters)
+    })
+    
+    runjs("document.getElementById('button1').onclick = function() { 
+           window.open('https://www.linkedin.com/in/oscar-rojo-martin/', '_blank');
+         };"
+    )
+    
+    url <- a("OSCAR ROJO Homepage", href="http://www.oscarrojo.es/")
+    url1 <- a("OSCAR ROJO LinkedIn", href="https://www.linkedin.com/in/oscar-rojo-martin/")
+    url2 <- a("OSCAR ROJO Medium", href="https://www.medium.com/@zumaia")
+    
+    output$Semi_collapsible_sidebar=renderMenu({
+        sidebarMenu(
+            menuItem("Presentacion", tabName = "presentation", icon = icon("presentation")),
+            menuItem("Datos", tabName = "data", icon = icon("table")),
+            menuItem("Comparador", tabName = "dashboard", icon = icon("dashboard")),
+            menuItem("Clustering", icon = icon("th"), tabName = "cluster",
+                     badgeLabel = "new",
+                     badgeColor = "green"),
+            menuItem("K means", icon = icon("th"), tabName = "means",
+                     badgeLabel = "wow",
+                     badgeColor = "red"),
+            menuItem("Scatter", icon = icon("bar-chart-o"), tabName = "charts"),
+            menuItem("OSCAR ROJO",
+                     menuSubItem("www.oscarrojo.es", tabName = "link", icon = icon("arrow-circle-right")),
+                     menuSubItem("zumaia@gmail.com", tabName = "email", icon = icon("envelope")),
+                     menuSubItem("linkedin.com/in/oscar-rojo-martin", tabName = "link1", icon = icon("arrow-circle-right")),
+                     menuSubItem("medium.com/@zumaia", tabName = "link2", icon = icon("arrow-circle-right"))
+                     
+                     
+                     )
+            )
+        })
+    
+    output$link <- renderUI({
+        tagList("URL link:", url)
+    })
+    
+    output$link1 <- renderUI({
+        tagList("URL link:", url1)
+    })
+    
+    output$link2 <- renderUI({
+        tagList("URL link:", url2)
+    })
+    
+    output$profile1 <- renderTable({
+        
+        p1_sum <- a %>% 
+            filter(barrio == input$p1) %>% 
+            select(barrio,
+                   habit_H,
+                   habit_M,
+                   ext_Total,
+                   tasa,
+                   renta,
+                   renta_18_39,
+                   renta_40_64,
+                   renta_65,
+                   turismos,
+                   motos)
+        return(t(p1_sum))
+        
+    }, colnames = FALSE, rownames = TRUE, align = 'c')
+    
+    output$profile2 <- renderTable({
+        
+        p2_sum <- a %>% 
+            filter(barrio == input$p2) %>% 
+            select(barrio,
+                   habit_H,
+                   habit_M,
+                   ext_Total,
+                   tasa,
+                   renta,
+                   renta_18_39,
+                   renta_40_64,
+                   renta_65,
+                   turismos,
+                   motos)
+        return( t(p2_sum) )
+        
+    }, colnames = FALSE, rownames = TRUE, align = 'c')
+    
+    output$compare <- renderPlot({
+        barrio_A <- input$p1
+        barrio_B <- input$p2
+        
+        # Attributes
+        att <- melt(data.frame(a[which(a$barrio %in% c(barrio_A, barrio_B)),c(1:39)]), id.vars = c('barrio'))
+        
+        att$value <- as.integer(as.character(att$value))
+        
+        att$desc <-  ifelse(att$variable %in% c('renta'), 
+                                  'renta',
+                                  ifelse(att$variable %in% c('habitantes.x'),
+                                         'habitantes.x',
+                                         ifelse(att$variable %in% c('importe.Vado'),
+                                                'importe.Vado',
+                                                ifelse(att$variable %in% c('turismos'),
+                                                       'turismos',
+                                                       ifelse(att$variable %in% c('motos'),
+                                                              'motos', 
+                                                              ifelse(att$variable %in% c('importe.I.A.E.'),
+                                                                     'importe.I.A.E.', 
+                                                                     ifelse(att$variable %in% c('ext_Total'),
+                                                                            'ext_Total',
+                                                                                            'NA')
+                                                                                 )
+                                                                )
+                                                )
+                                         )
+                                  )
+                           )
+        att <- att %>% 
+            filter(desc != 'NA') %>% 
+            group_by(barrio, desc) %>% 
+            summarise(value = mean(value))
+        
+        coord_radar <- function (theta = "x", start = 0, direction = 1) 
+            {
+            theta <- match.arg(theta, c("x", "y"))
+            r <- if (theta == "x") 
+                "y"
+            else "x"
+            ggproto("CoordRadar", 
+                    CoordPolar, 
+                    theta = theta, 
+                    r = r, 
+                    start = start, 
+                    direction = sign(direction),
+                    is_linear = function(coord) TRUE)
+            }
+        
+        ggplot(att, 
+               aes(x = desc, 
+                   y = value,
+                   fill = barrio,
+                   colour = barrio,
+                   group = barrio)) + 
+            geom_polygon(alpha = .2) + 
+            geom_point() + 
+            scale_fill_manual(values = c("#4CC2C4", "hotpink")) +
+            scale_colour_manual(values = c("#4CC2C4", "hotpink")) + 
+            coord_radar() + 
+            theme_minimal() + labs(title = "", subtitle = "") + ylim(0,40) +
+            theme( panel.grid.major = element_line(colour = 'grey'), 
+                   panel.grid.minor = element_line(colour = 'red'), 
+                   plot.background = element_rect(fill='gray98', colour='gray98'),
+                   panel.background = element_rect(fill='gray98', colour='gray98'),
+                   plot.subtitle = element_text(hjust = .5),
+                   legend.position = 'bottom', 
+                   legend.direction = 'horizontal', 
+                   legend.text.align = .5,
+                   legend.title = element_blank(), 
+                   legend.text = element_text(size = 14),
+                   legend.spacing.x = unit(.25, 'cm'),
+                   axis.text.x = element_text(size = 10), 
+                   axis.text.y = element_blank(),
+                   axis.title.x = element_blank(),
+                   axis.title.y = element_blank(), 
+                   strip.text = element_text(size = 10),
+                   text = element_text(family = "Andale Mono"),
+                   plot.title = element_text(hjust = 0.5, size = 14) )
+    } , bg = 'transparent', height = 500 , width = 450)
+    
+    
+    output$distPlot <- renderPlot({
+        
+        # las casillas de verificación y los números de cúmulos significan que la trama se ha redibujado, por lo que son reactivos
+        tocluster <- c(input$renta, input$tasa, input$habitantes.x, input$vehi_total, input$importe.Basura, input$importe.I.B.I..urbana)
+        if (sum(tocluster)==0){ 
+            plot(c(0,1,3), c(1,0,2), type="l", xaxt='n', yaxt='n',       #tick shape
+                 main="Por favor, elija una o más casillas de verificación de variables",   #reminder
+                 xlab="No funciona si no lo haces.",                    #please
+                 ylab="Sabes que quieres")                            #joke
+        }else{
+            dmat <- dist(stand_a[, tocluster], method = "euclidean")                   # distances 
+            fit <- hclust(dmat, method="ward.D")                           # Hierarchical clustering
+            plot(fit, main=paste("Cluster Dendrogram. Mean height (i.e. distance):", round(mean(dmat),1)),
+                 xlab="Puedes elegir cuántos clusters y qué variables")    # Display dendogram
+            rect.hclust(fit, k=input$clusters, border="red")              # red boxes round clusters
+        }
+    })
+    
+    
+    output$kmeans <- renderPlot(
+        height = 560, {
+            palette(c("#E41A1C", "#377EB8", "#4DAF4A", "#984EA3",
+                      "#FF7F00", "#FFFF33", "#A65628", "#F781BF", "#999999"))
+            par(mar = c(5.1, 4.1, 0, 1))
+            plot(selectedData(),
+                 col = clusters()$cluster,
+                 pch = 20, cex = 3)
+            points(clusters()$centers, pch = 4, cex = 4, lwd = 4)
+    })
+    
+    output$charts <- renderPlot({
+        p <- ggplot(a, 
+                    aes_string(x=input$x, y=input$y)) + geom_point() 
+        if (input$color != 'None')
+            p <- p + aes_string(color=input$color)
+        facets <- paste(input$facet_row, "~ .")
+        if (facets != '. ~ .')
+            p <- p + facet_grid(facets)
+        if (input$lm) 
+            p <- p + geom_smooth(method='lm',formula=y~x, na.rm = T)
+        if (input$smooth)
+            p <- p + geom_smooth(method='loess',formula=y~x, na.rm = T)
+        print(p)
+    })
+    
+    output$table <- renderDT(a[1:7],
+                             filter = "top",
+                             options = list(
+                                 pageLength = 10 
+                                 )
+                             )
+    
+    
+    }
+
+
+
+
+shinyApp(ui, server)

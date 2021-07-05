@@ -1,0 +1,2 @@
+"0","data$comision <- FALSE"
+"0","data$comision[data$fecha >= ""1855-03-01""] <- TRUE"

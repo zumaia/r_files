@@ -1,0 +1,3 @@
+"0","ab <- merge(demo_barrio, estu_barrio, by = ""barrio"", all.x = TRUE)"
+"0","abc <- merge (ab, extr_barrio, by = 'barrio', all.x = TRUE)"
+"0","abcd <- merge (abc, habitantes, by = 'barrio', all.x = TRUE)"

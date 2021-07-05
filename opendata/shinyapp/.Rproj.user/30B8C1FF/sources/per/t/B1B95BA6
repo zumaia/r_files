@@ -1,0 +1,25 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1605401918105.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "3973344430",
+    "id" : "B1B95BA6",
+    "lastKnownWriteTime" : 1605402733,
+    "last_content_update" : 1605402733014,
+    "path" : "/media/oscar/d854f3cb-888d-4d91-83cc-99f7b131bb63/home/oscar/Documentos/R/opendata/shinyapp/app.R",
+    "project_path" : "app.R",
+    "properties" : {
+        "cursorPosition" : "41,28",
+        "scrollLine" : "34"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 1,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

@@ -1,0 +1,36 @@
+---
+title: "Diagrama de Dispersión y Regresion en R"
+output: html_document
+---
+
+```{r}
+# Limpiamos el entorno de Trabajo
+rm(list=ls())
+
+# Limpiamos la consola
+cat("\014")
+
+setwd("~/Documentos/R")
+
+```
+
+## R Markdown
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Importamos las librerias a utilizar
+
+packages <- c("foreing", "ggplot2", "psych")
+newpack  = packages[!(packages %in% installed.packages()[,"Package"])]
+
+if(length(newpack)) install.packages(newpack)
+a=lapply(packages, library, character.only=TRUE)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

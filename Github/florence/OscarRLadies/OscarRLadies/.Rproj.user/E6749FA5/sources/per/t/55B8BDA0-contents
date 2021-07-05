@@ -1,0 +1,132 @@
+---
+title: 'Florence -200 aniversario Github R-Ladies'
+author: "Autor: Oscar Rojo Martín"
+date: "Mayo 2020"
+output:
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+  pdf_document:
+    highlight: zenburn
+    toc: yes
+  word_document: default
+---
+
+
+# .- Introducción
+
+https://www.business-science.io/learn-r/2020/04/20/setup-python-in-r-with-rmarkdown.html
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+library("magrittr")
+```
+
+CONCURSO DE ANÁLISIS DE DATOS CON MOTIVO DE LOS 200 AÑOS DEL NACIMIENTO DE FLORENCE NIGHTINGALE
+
+Con el objetivo de conmemorar los 200 años del nacimiento de Florence Nightingale, precursora de la estadística y epidemiología moderna, y primera mujer admitida en la Royal Statistical Society, el colectivo de Rladies España (nodos de Barcelona, Madrid y Bilbao) en colaboración con la Sociedad Española de Biometría y la Sociedad Catalana de Estadística se complace en anunciar el concurso: “200 AÑOS DE FLORENCE NIGHTINGALE”.
+
+El objetivo del concurso consiste en analizar el conjunto de datos que Florence Nightingale utilizó para analizar las causas de mortalidad del ejército británico durante la guerra de Crimea y que sirvió para determinar los factores asociados a la alta mortalidad y reducirla significativamente.
+
+https://github.com/rladies/spain_nightingale/blob/master/README.md
+
+https://github.com/rladies/spain_nightingale/blob/master/datos_florence.xlsx
+
+# .- Data
+
+Cargar los datos en bruto desde github y renombrar las columnas.
+
+```{r pressure, echo=FALSE}
+data_raw <- rio::import("https://github.com/rladies/spain_nightingale/raw/master/datos_florence.xlsx")
+
+data <- data_raw[c(-1,-2),]
+names(data) <- c("fecha", "ejercito", "muertes_zymotic", "muertes_heridas", "muertes_otras", "muertes_zymotic_anual", "muertes_heridas_anual", "muertes_otras_anual")
+data$ejercito <- as.numeric(data$ejercito)
+data$muertes_zymotic <- as.numeric(data$muertes_zymotic)
+data$muertes_heridas <- as.numeric(data$muertes_heridas)
+data$muertes_otras <- as.numeric(data$muertes_otras)
+data$muertes_zymotic_anual <- as.numeric(data$muertes_zymotic_anual)
+data$muertes_heridas_anual <- as.numeric(data$muertes_heridas_anual)
+data$muertes_otras_anual <- as.numeric(data$muertes_otras_anual)
+data$fecha[data$fecha == "Aug_1855"] <- "Aug 1855"
+data %<>% 
+  tidyr::separate(fecha, into = c("m", "y"), sep = " ") %>%
+  dplyr::mutate(y = as.numeric(y),
+                m = match(m, month.abb),
+                fecha = lubridate::make_date(y,m)) %>%
+  dplyr::select(-m, -y)
+```
+
+Se puede encontrar una explicación de los datos en:
+* https://vincentarelbundock.github.io/Rdatasets/doc/HistData/Nightingale.html
+* https://understandinguncertainty.org/node/214
+
+Los datos abarcan desde Abril de 1854 hasta Marzo de 1856 (3 años) con periodo mensual. Los datos se dividen en tres partes:
+
+1. Tamaño estimado del ejército (S)
+2. Datos sobre las muertes ocurridas en el ejército durante ese mes (D) por infección, por heridas o por otras.
+3. Extrapolación de los datos de muertes de ese mes a muertes anuales por 1000 si las circunstancias no cambiasen respecto a dicho mes (N). Estas tres variables permiten comparar los datos mensuales de muertes dado que están en unas unidades comunes.
+    
+Es decir, los datos correspondientes al tercer punto se calculan usando los del segundo punto mediante la transformación N = 12000 * D / S donde D es el número de muertes ocurridas ese mes, y S es el tamaño estimado del ejercito. Se multiplica por 12000 para transformar las unidades de mensual a anual ( x 12), y a muertes por cada 1000 (x 1000).
+
+```{r}
+# Comprobar que las tres últimas columnas se pueden calcular a partir de los datos mensuales
+data %>%
+  dplyr::mutate(muertes_zymotic_anual_calculada = 12000 * muertes_zymotic / ejercito,
+                muertes_heridas_anual_calculada = 12000 * muertes_heridas / ejercito,
+                muertes_otras_anual_calculada = 12000 * muertes_otras / ejercito) %>%
+  tidyr::gather(muertes_anuales_tipo, muertes_anuales_valor, -fecha, -ejercito, 
+                -muertes_zymotic, -muertes_heridas, -muertes_otras) %>%
+  ggplot2::ggplot(ggplot2::aes(muertes_anuales_tipo, muertes_anuales_valor)) +
+  ggplot2::geom_col() +
+  ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, vjust = 1, hjust = 1))
+```
+
+Otros aspecto importante a considerar es que en Marzo de 1855 una Comisión Sanitaria fue enviada para mejorar la higiene en los campamentos y hospitales.
+
+```{r}
+data$comision <- FALSE
+data$comision[data$fecha >= "1855-03-01"] <- TRUE
+```
+
+# .- Análisis descriptivo datos extrapolaciones anuales
+
+Mostramos la serie temporal de las muertes anuaelas por mil, en escala logarítmica para poder apreciar mejor las diferencias entre las tres series.
+
+```{r}
+data %>%
+  dplyr::select(fecha, muertes_zymotic_anual, muertes_heridas_anual, muertes_otras_anual) %>%
+  tidyr::gather(muertes_tipo, muertes_valor, -fecha) %>%
+  ggplot2::ggplot(ggplot2::aes(x = fecha, y = muertes_valor, col = muertes_tipo)) +
+  ggplot2::geom_line() +
+  ggplot2::geom_point() +
+  ggplot2::scale_y_log10()
+```
+
+Se puede apreciar el impacto de la comisión sanitaria en la reducción de muertes por infecciones a partir de su llegada en Marzo de 1855. Florence Nightingale usó unos diagramas llamados "Coxcombs" pero la información que reproducen viasualmente es la misma que en la gráfica anterior.
+
+```{r}
+# Representación mediante diagramas "Coxcombs" (usando coordenadas polares)
+data %>%
+  dplyr::select(fecha, muertes_zymotic_anual, muertes_heridas_anual, muertes_otras_anual) %>%
+  tidyr::gather(muertes_tipo, muertes_valor, -fecha) %>%
+  dplyr::mutate(muertes_valor_polar = sqrt(muertes_valor / pi)) %>%
+  ggplot2::ggplot(ggplot2::aes(x = fecha, y = muertes_valor_polar, fill = muertes_tipo)) +
+  ggplot2::geom_col() +
+  ggplot2::coord_polar()
+```
+
+# .- Preguntas
+
+A partir de este análisis descriptivo hay dos preguntas que pueden formularse:
+
+1. Se puede determinar estadísticamente (e.g., mediante un test de hipótesis) que la tendencia antes de Marzo de 1855 es diferente de la posterior a esa fecha, es decir, que la comisión sanitaria tuvo un impacto real. En caso afirmativo, ¿afectó por igual a las tres causas de muerte?
+
+2. ¿Qué hubiera pasado si la comisión sanitaria no hubiera sido enviada?

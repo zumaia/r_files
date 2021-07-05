@@ -1,0 +1,117 @@
+---
+title: "Shiny Vignette"
+author: "JJB"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+runtime: shiny
+vignette: >
+  %\VignetteIndexEntry{Shiny Vignette Test}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+# Intro
+
+This vignette is meant to quickly showcase how to embed a shiny application
+into a package's vignette directory.
+
+## Shiny App
+
+Next, we're going to embed the default Shiny application that ships with RStudio.
+
+```{r}
+library(shiny)
+# Define UI for application that draws a histogram
+ui <- fluidPage(
+    
+    # Application title
+    titlePanel("Old Faithful Geyser Data"),
+    
+      verbatimTextOutput("server"),
+  tags$script('
+          $(document).ready(function(){
+          var d = new Date();
+          var target = $("#clientTime");
+          target.val(d.toLocaleString());
+          target.trigger("change");
+          });
+          '),
+  textInput("clientTime", "Client Time", value = ""),
+  verbatimTextOutput("local"),
+    
+    # Sidebar with a slider input for number of bins 
+    sidebarLayout(
+        sidebarPanel(
+            sliderInput("bins",
+                        "Number of bins:",
+                        min = 1,
+                        max = 50,
+                        value = 30)
+        ),
+        
+        # Show a plot of the generated distribution
+        mainPanel(
+            plotOutput("distPlot")
+        )
+    )
+)
+# Define server logic required to draw a histogram
+server <- function(input, output) {
+  
+    output$server <- renderText({ c("Server time:", as.character(Sys.time()), as.character(Sys.timezone())) })
+    session$userData$time <- reactive({format(lubridate::mdy_hms(as.character(input$clientTime)), "%d/%m/%Y; %H:%M:%S")})
+    output$local <- renderText({session$userData$time() })
+    
+    output$distPlot <- renderPlot({
+        # generate bins based on input$bins from ui.R
+        x    <- faithful[, 2] 
+        bins <- seq(min(x), max(x), length.out = input$bins + 1)
+        
+        # draw the histogram with the specified number of bins
+        hist(x, breaks = bins, col = 'darkgray', border = 'white')
+    })
+}
+# Run the application 
+shinyApp(ui = ui, server = server)
+```
+
+```{r}
+
+# basic example
+shinyApp(
+  ui = fluidPage(
+    selectInput("variable", "Variable:",
+                c("Cylinders" = "cyl",
+                  "Transmission" = "am",
+                  "Gears" = "gear")),
+    tableOutput("data")
+  ),
+  server = function(input, output) {
+    output$data <- renderTable({
+      mtcars[, c("mpg", input$variable), drop = FALSE]
+    }, rownames = TRUE)
+  }
+)
+```
+
+```{r}
+# demoing group support in the `choices` arg
+shinyApp(
+  ui = fluidPage(
+    selectInput("state", "Choose a state:",
+      list(`East Coast` = list("NY", "NJ", "CT"),
+           `West Coast` = list("WA", "OR", "CA"),
+           `Midwest` = list("MN", "WI", "IA"))
+    ),
+    textOutput("result")
+  ),
+  server = function(input, output) {
+    output$result <- renderText({
+      paste("You chose", input$state)
+    })
+  }
+)
+
+```
+
+

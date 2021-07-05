@@ -1,0 +1,101 @@
+---
+title: "Cross Validation - Using Crossval"
+output: html_document
+---
+
+```{r}
+# Limpiamos el entorno de Trabajo
+rm(list=ls())
+
+# Limpiamos la consola
+cat("\014")
+
+setwd("~/Documentos/R")
+
+```
+
+```{r setup, include=FALSE}
+
+
+# Installing crossval from GitHub (in R console):
+
+devtools::install_github("thierrymoudiki/crossval")
+```
+
+```{r}
+# Loading packages:
+# install.packages("glmnet")
+library(glmnet)
+library(crossval)
+```
+
+```{r}
+# Load mtcars dataset
+
+data("mtcars")
+head(mtcars)
+```
+
+```{r}
+df <- mtcars[, c(1, 2, 3, 4, 6, 11)]
+summary(df)
+```
+
+```{r}
+installed.packages(psych())
+library(psych) 
+pairs.panels(df, pch=21,main="Gráfico 01.6: Matriz de Dispersión, Histograma y Correlación")
+```
+
+
+```{r}
+# Create response and explanatory variables from mtcars dataset
+
+X <- as.matrix(df[, -1]) # explanatory variables
+y <- df$mpg # response
+```
+
+```{r}
+# Grid of hyperparameters for glmnet
+
+tuning_grid <- expand.grid(alpha = c(0, 0.5, 1),
+                           lambda = c(0.01, 0.1, 1))
+n_params <- nrow(tuning_grid)
+print(tuning_grid)
+```
+
+```{r}
+# Grid search cross-validation
+
+#     list of cross-validation results
+#     5-fold cross-validation (k)
+#     repeated 3 times (repeats)
+#     cross-validation of 80% of the data (p)
+#     validation on the remaining 20%
+
+cv_results <- lapply(1:n_params,
+                     function(i)
+                       crossval::crossval_ml(
+                         x = X,
+                         y = y,
+                         k = 5,
+                         repeats = 3,
+                         p = 0.8,
+                         fit_func = glmnet::glmnet,
+                         predict_func = predict.glmnet,
+                         packages = c("glmnet", "Matrix"),
+                         fit_params = list(alpha = tuning_grid[i, "alpha"],
+                                           lambda = tuning_grid[i, "lambda"])
+                       ))
+```
+
+```{r}
+names(cv_results) <- paste0("params_set", 1:n_params)
+
+# Print grid search results
+
+# Remarks are welcome.
+
+print(cv_results)
+```
+

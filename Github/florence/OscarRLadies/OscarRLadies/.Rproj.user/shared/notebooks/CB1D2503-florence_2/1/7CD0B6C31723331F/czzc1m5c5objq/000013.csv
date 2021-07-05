@@ -1,0 +1,2 @@
+"0","library(forecast)"
+"0","autoplot(forecast(mytstT1,10))"

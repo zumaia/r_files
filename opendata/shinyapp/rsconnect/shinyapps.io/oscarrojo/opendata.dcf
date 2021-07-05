@@ -1,0 +1,12 @@
+name: opendata
+title: opendata
+username:
+account: oscarrojo
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 3239091
+bundleId: 3866256
+url: https://oscarrojo.shinyapps.io/opendata/
+when: 1605522461.20231
+asMultiple: FALSE
+asStatic: FALSE

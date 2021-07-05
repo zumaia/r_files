@@ -1,0 +1,807 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+
+# Limpieza y preparación entorno trabajo
+
+```{r Limpieza y preparación}
+# Limpiamos el entorno de Trabajo
+rm(list=ls())
+
+# Limpiamos la consola
+cat("\014")
+
+# Comprobamos que está bien establecido el directorio
+getwd()
+dir()
+```
+```{r Directorio de trabajo}
+#indicamos el directorio de trabajo
+setwd("~/Documentos/R")
+```
+# Carga de librerias
+```{r Carga Librerias}
+
+packages <- c("tidyverse", "kableExtra", "git2r","descr", "prettyR", "gganimate", "brm", "bayesplot")
+newpack  = packages[!(packages %in% installed.packages()[,"Package"])]
+
+if(length(newpack)) install.packages(newpack)
+a=lapply(packages, library, character.only=TRUE)
+```
+# 
+
+El siguiente código pretende ser un recorrido paso a paso sobre cómo implementar y evaluar un modelo de Efectos Mixtos Lineales Bayesianos para simular datos de tasas de rebote en sitios web en todos los condados ingleses. La variable de respuesta y es la tasa de rebote del sitio web en segundos (tasa de rebote = tiempo que un usuario pasa en un sitio web), y las variables independientes son la edad (edad del usuario) y la ubicación (condado).
+
+
+```{r}
+#require(tidyverse)
+require(dplyr) # dplyr 1.0.0
+require(knitr)
+#require(kableExtra)
+require(gridExtra)
+require(grid)
+require(ggpubr)
+require(modelr)
+
+# Animation library
+require(gganimate)
+require(gifski)
+require(png)
+
+# Mixed Effects Model libraries
+require(rstan)
+require(brms)
+require(tidybayes)
+require(bayesplot)
+require(loo)
+
+# Prior libraries
+require(extraDistr)
+```
+
+# Load Data
+
+```{r}
+#cols() suppresses messages
+bounce_data <- read_csv("datos/bounce_rates_sim.csv", 
+                        col_types = cols() )  %>% 
+  mutate(county = as.factor(county))
+
+kable(bounce_data) %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive", "funModeling")) %>%
+  row_spec(0, background = "#4CAF50", color="#FFF")  %>% 
+  scroll_box(width = "100%", height = "200px") 
+
+# kable(head(bounce_data), format = "html", table.attr = "style = \"color: white;\"")
+```
+
+```{r AED/EDA funcion}
+aed_basico <- function(data)
+{
+  glimpse(data)
+  funModeling::status(data)
+  prettyR::freq(data) 
+  funModeling::profiling_num(data)
+  funModeling::plot_num(data)
+  describe(data)
+  dim(data)
+  summary(data)
+  colnames(data)
+}
+```
+```{r}
+aed_basico(bounce_data)
+```
+
+
+# Preprocess data
+
+Standardize (center-scale) age variable
+```{r}
+# Standardize data
+bounce_data <- bounce_data %>% 
+  mutate(std_age = scale(age)[,1]) %>% 
+  dplyr::relocate(std_age, .after=age)
+  
+# Example std_age data
+summary(bounce_data)
+```
+
+# Exploratory Data Analysis
+
+Using a ground-up approach to modeling, we combine an EDA + modeling step to guide our modeling approach in an iterative fashion. First build a baseline model (doesn’t have to be Bayesian) where we start simple and build up based on how we see the model performs
+
+    Base Model
+    Mixed effects
+
+A simple linear regression for example. The model doesn’t to perform well, for example it has a small Adj R2
+value, the residual vs fitted plot shows heteroscedastic variance (i.e. there’s a trend), and when we plot the data with the trendline estimated with this model we see it might not capture group differences leading to an example of Simpson’s paradox.
+
+```{r}
+base_model <- lm(bounce_time ~ std_age, data=bounce_data)
+
+summary(base_model)
+```
+
+```{r}
+ggplot(base_model) + 
+  geom_point(aes(x=.fitted, y=.resid)) +
+  geom_smooth(aes(x=.fitted, y=.resid), se = FALSE ) +
+  labs(x = "Fitted", y="Residuals", title="Variance isn't constant (homoscedastic), we see a fanning down trend" )
+```
+```{r}
+ggplot(bounce_data, aes(x = std_age, y = bounce_time, color=county)) + 
+  geom_smooth(data=bounce_data, aes(x=std_age, y=bounce_time),
+              method="lm", inherit.aes = FALSE, se=FALSE, color="black", size=0.9) +
+  geom_point(alpha=0.5) +
+  labs(x = "Age (standardized)", y="Bounce rates (secs)", title="The line seems to capture the overall population trend, but might miss group trends (Simpson's paradox)" ) +
+  theme(title = element_text(size=8))
+```
+
+
+# Modelado Bayesiano
+
+El primer paso para definir un modelo bayesiano es seleccionar un conjunto de antecedentes. En nuestro caso, estamos definiendo un modelo Bayesiano de Efectos Mixtos Lineales que asume que los datos están normalmente distribuidos y varían entre los grupos.
+
+
+
+## Los controles predictivos previos
+
+Al seleccionar anterior nos gustaría seleccionar aquellos que se consideran débilmente informativos e idealmente conjugados. Lo primero, simplemente se refiere a seleccionar un conjunto de priores que generarían conjuntos de datos plausibles similares a nuestros datos observados, mientras que lo segundo ayuda a definir el modelo como un modelo generativo. La gente podría confundir las distribuciones débilmente informativas con las difusas, sin embargo esto podría generar conjuntos de datos imposibles (por ejemplo, valores muy extremos) que podrían ser perjudiciales.
+
+Prácticamente esto significa que generaremos varios conjuntos de datos simulados basados en el conjunto de los anteriores, y comprobaremos que éstos proporcionan valores plausibles.
+
+    Modelo de interceptación aleatoria
+
+
+Matemáticamente, este modelo se define de la siguiente manera
+yi,j∼N(β0+b0,j+β1xi,j,σ2)
+b0,j∼N(0,τ2)
+
+y tenemos que establecer prioridades para los siguientes parámetros - σ,τ, β0 y β1
+
+Aquí elegimos prioridades para la interceptación alrededor de la media de la muestra de 200 y para la pendiente de alrededor de 1 dado lo que hemos observado para cada grupo (es decir, interceptaciones que varían a lo largo de los 200 y la pendiente de la población es 4). Así pues, establecemos τ∼N+(0,10)
+y σ∼N+(0,100), mientras que β0∼N(200,1) y β1∼N(4,1).
+
+    Modelo de intercepción aleatoria + pendiente
+    
+Matemáticamente, este modelo se define de la siguiente manera
+yi,j∼N(β0+b0,j+(b1,j+β1)xi,j,σ2)(b0,jb1,j)∼N(0,(τ00τ10τ01τ11))
+
+y tenemos que establecer prioridades para los siguientes parámetros - σ
+τ0, τ1, β0 y β1
+
+Escogemos similar anterior como antes y añadimos τ1∼N+(0,10)
+al conjunto de antecedentes.
+
+```{r}
+seed_nums <- 1:10
+sim_df <- tibble(sim_no = integer(),
+                 raw = numeric(),
+                 y_sim = numeric())
+
+# Generate a flip-book of simulations
+for (i in 1:length(seed_nums)){
+  set.seed(i)
+  # Variance / std deviation priors
+  tau <- abs(rnorm(1, 0, sd = 10))
+  sigma <- abs(rnorm(1, 0, sd = 100))
+  epsilon <- rnorm(nrow(bounce_data), mean=0, sd=sigma)
+  
+  # Fixed / Random effects priors
+  b0 <- rnorm(8, mean=0, sd=tau)
+  beta0 <- rnorm(1, mean=200, sd=1)
+  beta1 <- rnorm(1, mean=4, sd=1)
+
+  # Simulated df
+  sims <- tibble(sim_no = i,
+                 raw = bounce_data$bounce_time,
+                 y_sim = beta0 + b0[bounce_data$county] + beta1*bounce_data$std_age + epsilon)
+  
+  sim_df <- bind_rows(sim_df, sims)
+  
+}
+
+
+animate(ggplot(sim_df, aes(x=raw, y=y_sim)) +
+  geom_point() +
+  ggtitle("Random intercept model: notice changing y-axis, values are plausible yet not identical",
+          subtitle = 'Simulation #: {closest_state}') +
+  labs(x= "Bounce rates (sec)", y="Simulated rates (secs)") +
+  theme(title= element_text(size=7)) +
+  transition_states(as.factor(sim_no),
+                    transition_length = 1,
+                    state_length = 10) +
+  view_follow(),
+  fps =100, res=120, width=700, height=600)
+```
+
+# Ajuste del modelo
+
+Ahora que tenemos una idea de los antecedentes, podemos ajustar los modelos bayesianos usando Brms, que funciona con Rstán y usa un constructor de fórmulas familiar y fácil de usar (igual que lme4).
+
+Aquí encajaremos los 3 Bayesianos mencionados anteriormente: Regresión lineal simple, modelo de intercepción aleatoria y modelo de intercepción aleatoria + pendiente.
+
+## Regresión lineal simple
+```{r}
+# If you are unsure on how to set up priors, you can use get_prior function to see how to specify them
+#get_prior(bounce_time ~ std_age, data=bounce_data)
+if (!file.exists("models/lin_reg.rds")){
+  lin_reg <-  brm(bounce_time ~ std_age, 
+                  data=bounce_data,
+                  family = gaussian(),
+                  prior= c(prior(normal(200, 1), class = Intercept), # intercept prior
+                           prior(normal(4, 1), class = b), # fixed effects prior
+                           prior(normal(0, 100), class = sigma) # default lower bound is 0 (i.e truncated)
+                  ),
+                  warmup = 1000, # burn-in
+                  iter = 5000, # number of iterations
+                  chains = 2,  # number of MCMC chains
+                  control = list(adapt_delta = 0.95))
+  
+  saveRDS(lin_reg, file="models/lin_reg.rds")
+} else {
+  lin_reg <- readRDS("models/lin_reg.rds")
+}
+
+summary(lin_reg)
+```
+
+## Modelo de Intercepción aleatoria
+
+Aquí encajamos el modelo de intercepción aleatoria como se definió anteriormente
+```{r}
+#get_prior(bounce_time ~ std_age + (1|county), data=bounce_data)
+
+if (!file.exists("models/r_intercept.rds")){
+  bayes_rintercept <- brm(bounce_time ~ std_age + (1|county),
+                          data = bounce_data,
+                          prior = c(prior(normal(200, 1), class = Intercept), # intercept prior
+                                    prior(normal(4, 1), class = b), # fixed effects prior
+                                    prior(normal(0, 100), class = sigma), # population variance
+                                    prior(normal(0, 10), class = sd)), # i.e. tau, group variance
+                          warmup = 1000, # burn-in
+                          iter = 5000, # number of iterations
+                          chains = 2,  # number of MCMC chains
+                          control = list(adapt_delta = 0.95)) 
+
+  saveRDS(bayes_rintercept, file= "models/r_intercept.rds")
+  
+} else {
+  bayes_rintercept <- readRDS("models/r_intercept.rds")
+}
+
+summary(bayes_rintercept)
+```
+
+
+## modelo de intercepcion aleatoria + pendiente
+Luego ajustamos un modelo de intercepción aleatoria y de pendientes como se especificó anteriormente
+```{r}
+#get_prior(bounce_time ~ std_age + (1 + std_age |county), data=bounce_data)
+
+if (!file.exists("models/r_slope.rds")){
+  
+  bayes_rslope <- brm(bounce_time ~ std_age + (1 + std_age|county),
+                        data = bounce_data,
+                        prior = c(prior(normal(200, 1), class = Intercept), # intercept prior
+                                  prior(normal(4, 1), class = b), # fixed effects prior
+                                  prior(normal(0, 100), class = sigma), # population variance
+                                  prior(normal(0, 10), class = sd, 
+                                        group=county, coef="Intercept"), #tau 0
+                                  prior(normal(0, 10), class = sd, 
+                                        group=county, coef="std_age")),  #tau 1
+                        warmup = 1000, # burn-in
+                        iter = 5000, # number of iterations
+                        chains = 2,   # number of MCMC chains
+                        control = list(adapt_delta = 0.95))
+  
+  saveRDS(bayes_rslope, file="models/r_slope.rds")
+} else {
+  bayes_rslope <- readRDS("models/r_slope.rds")
+}
+```
+
+# Diagnóstico del MCMC
+
+Hacemos algunos diagnósticos tempranos sobre las inferencias de los parámetros posteriores y las cadenas de MCMC (es decir, trazados y autocorrelación).
+
+El HMC (Montecarlo Hamiltoniano) tiende a proporcionar una buena mezcla de cadenas MCMC y una baja autocorrelación (aún computada aquí), sin embargo hay diagnósticos adicionales (es decir, divergencia de transición) que pueden ser útiles de observar con el muestreo del HMC.
+
+Esta última parte es particularmente importante si la salida del ajuste de Brms nos advierte que parece haber transiciones divergentes.
+
+```{r}
+# get naming of variables
+#get_variables(lin_reg) 
+
+## Divergence
+
+# color_scheme_set("darkgray")
+d1 <- bayesplot::mcmc_scatter(
+  as.matrix(lin_reg),
+  pars = c("sigma", "b_Intercept"),
+  alpha = 2/3,
+  np = nuts_params(lin_reg),
+  np_style = scatter_style_np(div_color = "green", div_size = 2.5, div_alpha = 0.75)) 
+
+d2 <- mcmc_scatter(
+  as.matrix(lin_reg),
+  pars = c("sigma", "b_std_age"),
+  alpha = 2/3,
+  np = nuts_params(lin_reg),
+  np_style = scatter_style_np(div_color = "green", div_size = 2.5, div_alpha = 0.75))
+
+grid.arrange(d1,d2, ncol=2, 
+             top = textGrob("Linear Regression HCM Divergence plots: \n No divergence (green) encountered, thus space was explored entirely",gp=gpar(fontsize=12,font=1))) 
+```
+
+```{r}
+# Numeric check of divergence
+# lin_reg %>% 
+#  spread_draws(divergent__) %>% 
+#  mean_hdi()
+
+
+## Traceplots
+bayesplot::color_scheme_set("mix-brightblue-gray")
+bayesplot::mcmc_trace(lin_reg,  pars = c("b_Intercept", "b_std_age", "sigma"), n_warmup = 500,
+                facet_args = list(ncol = 2, labeller = label_parsed)) +
+  labs(x = "Iteration", title="Linear Regression MCMC chain traceplot seems to mix well")
+```
+
+```{r}
+## Autocorrelation
+bayesplot::mcmc_acf(lin_reg, pars = c("b_Intercept", "b_std_age", "sigma"), lags = 15) +
+  ggtitle("Linear Regression ACF plot",
+          subtitle="MCMC ACF for all params seems to have at most lag 1-2 which is desirable")
+```
+
+# Comparación de modelos
+## Comprobaciones predictivas posteriores
+
+Utilizamos comprobaciones predictivas posteriores para evaluar nuestros modelos. Aquí cubrimos algunas comprobaciones cualitativas y cuantitativas de predicción posterior que pueden ayudar en nuestra comparación de modelos.
+
+Para estas comprobaciones simulamos a partir de la distribución predictiva posterior (es decir, muestra de la distribución predictiva posterior)
+p(y~∣y)=∫p(y~|θ)p(θ|y)dθ
+donde y son nuestras observaciones, y~ son nuevos datos a predecir, y θ son parámetros del modelo (inferidos mediante el ajuste bayesiano).
+
+
+    Densidades posteriores
+
+Primero, comparamos las densidades simuladas contra las observadas del tiempo de rebote. Observamos que los modelos de efectos mixtos parecen simular datos similares a los datos empíricos en comparación con la regresión lineal simple simulada.
+
+```{r}
+# Plot posterior simulated densities 
+
+# Get observed values
+y_obs <- bounce_data$bounce_time
+
+# Linear regression
+color_scheme_set("red")
+pdense1 <- ppc_dens_overlay(y = y_obs,
+                           yrep = posterior_predict(lin_reg, nsamples = 100)) +
+  labs(x = "Bounce time (s)", y ="Density", title = "Linear Regression") +
+  theme(title = element_text(size=10))
+
+# Random Intercept
+color_scheme_set("gray" )
+pdense2 <- ppc_dens_overlay(y = y_obs,
+                           yrep = posterior_predict(bayes_rintercept, nsamples = 100)) +
+  labs(x = "Bounce time (s)", title = "Random Intercept") +
+  theme(title = element_text(size=10))
+
+# Random Slope
+color_scheme_set("teal")
+pdense3 <- ppc_dens_overlay(y =y_obs,
+                           yrep = posterior_predict(bayes_rslope, nsamples = 100)) +
+  labs(x = "Bounce time (s)", title = "Random Intercept + Slope") +
+  theme(title = element_text(size=10))
+  
+
+# Aggregate and plot pictures side-by-side
+ppc_figure <- ggarrange(pdense1, pdense2, pdense3, ncol=3,
+                        common.legend = TRUE, legend = "bottom",
+                        font.label = list(size=10))
+
+annotate_figure(ppc_figure,
+               top = text_grob("Posterior predictive draws (y_rep) for each model vs observed data (y)"))
+```
+
+
+    Estadísticas resumidas posteriores
+
+A continuación, miramos algunas estadísticas resumidas. Dado que los controles predictivos posteriores utilizan los datos dos veces (es decir, uno para el ajuste y otro para la comprobación), nos fijamos en las estadísticas de resumen no relacionadas con ninguno de los parámetros que actualizamos. En nuestro caso, utilizaremos la mediana y la asimetría en lugar de la media y la varianza (que hemos deducido).
+
+A continuación se muestra un ejemplo de por qué miraríamos las estadísticas de resumen no relacionadas. Observamos que todas las simulaciones del modelo parecen capturar la media observada del tiempo_de_rebote, sin embargo, cuando observamos la oblicuidad observamos que las simulaciones del modelo de regresión simple no reflejan la oblicuidad de los datos observados.
+```{r}
+# Fisher Pearson skew https://www.itl.nist.gov/div898/handbook/eda/section3/eda35b.htm
+skew <- function(y){
+  n <- length(y)
+  dif <- y - mean(y)
+  skew_stat <- (sqrt(n-1)/(n-2))*n *(sum(dif^3)/(sum(dif^2)^1.5))
+  return(skew_stat)
+}
+
+# Helper function to plot PPC test statistic plots
+posterior_stat_plot <- function(obs, model, samples=1000, statistic="mean"){
+  fig <- ppc_stat(y = obs, 
+                   yrep = posterior_predict(model, nsamples = samples),
+                   stat = statistic)
+  
+  return(fig)
+}
+
+# Linear Reg Mean and skewness
+color_scheme_set("red")
+pmean1 <- posterior_stat_plot(y_obs, lin_reg) + labs(y="Linear Regression") +
+  theme(legend.text = element_text(size=8), 
+        legend.title = element_text(size=8))
+
+pskew1 <- posterior_stat_plot(y_obs, lin_reg, statistic = "skew") +
+  theme(legend.text = element_text(size=8),
+        legend.title = element_text(size=8))
+
+# Random Intercept Mean and skewness
+color_scheme_set("gray")
+pmean2 <- posterior_stat_plot(y_obs, bayes_rintercept) + labs(y="Random Intercept")
+pskew2 <- posterior_stat_plot(y_obs, bayes_rintercept, statistic = "skew")
+
+color_scheme_set("teal")
+pmean3 <- posterior_stat_plot(y_obs, bayes_rslope) +
+  labs(x = "Mean", y ="Random Intercept + Slope")
+
+pskew3 <- posterior_stat_plot(y_obs, bayes_rslope, statistic = "skew") +
+  labs(x = "Fisher-Pearson Skewness Coeff")
+
+# Random Slope Mean and skewness
+ppc_stat1_figure <- ggarrange(pmean1, pskew1, legend="top",
+                        font.label = list(size=10))
+ppc_stat2_figure <- ggarrange(pmean2, pskew2, legend = "none",
+                        font.label = list(size=10))
+ppc_stat3_figure <- ggarrange(pmean3, pskew3, legend= "none",
+                              font.label = list(size=10))
+
+stat_figure <- ggarrange(ppc_stat1_figure, ppc_stat2_figure, ppc_stat3_figure, nrow=3)
+
+annotate_figure(stat_figure,
+               top = text_grob("Posterior test statistics T(y_rep) for each model vs observed data T(y)"))
+```
+    
+    
+De manera similar, podemos ver cómo las simulaciones de cada modelo capturan la mediana de cada grupo en lugar de la media. De nuevo observamos que los modelos de efectos mixtos capturan la mediana de cada condado en comparación con la regresión lineal simple.
+
+```{r}
+# Compute PPC test statistics per group for each model
+
+# Linear regression
+color_scheme_set("red")
+med_figure <- ggarrange(lin_reg %>% 
+                          posterior_predict(nsamples=500) %>% 
+                          ppc_stat_grouped(y = y_obs,
+                                           group = bounce_data$county, stat = "median") +
+                          ggtitle("Linear Regression") +
+                          theme(title = element_text(size=10)),
+                        nrow = 1, legend = "none")
+
+annotate_figure(med_figure,
+               top = text_grob("Posterior median T(y_rep) for each model vs observed data T(y) across counties"))
+```
+
+```{r}
+# Random Intercept
+color_scheme_set("gray")
+ggarrange(bayes_rintercept %>% 
+            posterior_predict(nsamples=500) %>% 
+            ppc_stat_grouped(y = y_obs,
+                             group = bounce_data$county, stat = "median") + 
+            ggtitle("Random Intercept") +
+            theme(title = element_text(size=10)),
+          nrow = 1, legend = "none")
+```
+
+```{r}
+# Random slope
+color_scheme_set("teal")
+ggarrange(bayes_rintercept %>% 
+            posterior_predict(nsamples=500) %>% 
+            ppc_stat_grouped(y = y_obs,
+                             group = bounce_data$county, stat = "median") +
+            ggtitle("Random Intercept + Slope") +
+            theme(title = element_text(size=10)),
+          nrow = 1, legend = "bottom")
+```
+
+# LOO Cross-validation (Marginal Predictive Checks)
+
+También podemos comprobar cómo funciona nuestro modelo basado en las distribuciones predictivas marginales
+p(y~i∣y)
+
+en lugar de utilizar las densidades conjuntas como se ha indicado anteriormente. Esto puede ser útil para encontrar valores atípicos o comprobar la calibración general.
+
+En un entorno Bayesiano, podemos calcular la validación cruzada de la omisión (LOO CV) a través de la distribución predictiva LOO
+p(yi∣y-i)
+a través de un método de muestreo de importancia de Pareto (PSIS).
+
+    Calibración
+
+
+En primer lugar, para comprobar la calibración del modelo global, aprovechamos alguna teoría de la probabilidad, específicamente el concepto de transformación integral de la probabilidad. En nuestro caso, dado que tenemos un resultado continuo, esto significa que si la densidad predictiva posterior es la distribución verdadera, entonces su CDF predictiva que debería seguir una distribución uniforme (como n->∞
+
+).
+
+En los gráficos siguientes, vemos que la regresión lineal sigue esta forma uniforme, mientras que los modelos de efectos mixtos parecen mostrar algunas desviaciones. Es probable que así sea como se simularon los datos y debería tomarse con un grano de sal para este ejemplo, pero debería ayudar a mostrar otra herramienta de diagnóstico que se puede utilizar.
+
+```{r}
+# Compute LOO CV for each model, keeping PSIS object for later use
+loo1 <- loo(lin_reg, save_psis = TRUE, cores = 2)
+lw1 <- weights(loo1$psis_object)
+
+loo2 <- loo(bayes_rintercept, save_psis = TRUE, cores=2)
+lw2 <- weights(loo2$psis_object)
+
+loo3 <- loo(bayes_rslope, save_psis = TRUE, cores = 2)
+lw3 <- weights(loo3$psis_object)
+
+# Plot predictive CDF to check for uniform distribution
+color_scheme_set("red")
+pit1 <- ppc_loo_pit_overlay(y_obs, posterior_predict(lin_reg), lw = lw1)
+
+color_scheme_set("gray")
+pit2 <- ppc_loo_pit_overlay(y_obs, posterior_predict(bayes_rintercept), lw = lw2)
+
+color_scheme_set("teal")
+pit3 <- ppc_loo_pit_overlay(y_obs, posterior_predict(bayes_rslope), lw = lw3)
+
+pit_figure <- ggarrange(pit1, pit2, pit3, ncol=3, 
+                        common.legend = TRUE, 
+                        legend = "bottom")
+
+
+annotate_figure(pit_figure,
+               top = text_grob("LOO CV Probability Integral Transfrom for each model "))
+```
+
+
+    Comparaciones de ELPD, valores atípicos y puntos de influencia
+
+Como siempre nos gustaría saber cuál es la exactitud de predicción de nuestros modelos, dado que hay algunos datos fuera de muestra (que son desconocidos). En el modelado bayesiano, podemos hacerlo mediante una densidad predictiva logarítmica esperada fuera de la muestra (ELPD) que también se denomina densidad predictiva logarítmica esperada. Esto básicamente promedia el rendimiento predictivo del modelo sobre la distribución de los datos futuros.
+
+Calculamos la ELPD general para cada modelo mediante valores logarítmicos-predictivos de LOO CV, y podemos utilizarla para comparar el rendimiento predictivo esperado de cada modelo. Aquí el modelo de intercepción aleatoria parece tener el mejor rendimiento (es decir, 0,0 que es la línea de base). Cuanto más negativa es esta diferencia, peor es el rendimiento del modelo.
+  
+```{r}
+# Compare ELPD between models
+comp <- loo_compare(loo1, loo2, loo3)
+
+comp
+```
+
+También podemos usar LOO log-predictivo para encontrar observaciones que son difíciles de predecir entre los modelos (es decir, valores atípicos o puntos de alta influencia). En términos de comparación de modelos podemos mirar qué modelo captura mejor estas observaciones.
+
+Podemos hacerlo mediante la comparación puntual de ELPD entre los modelos, así como mirando algunos diagnósticos relacionados con el método PSIS utilizado para calcular las densidades LOO log-predictive.
+
+Dependiendo de cómo se comparen los valores del modelo (es decir, Modelo1 - Modelo2 vs. Modelo2 - Modelo1), las diferencias positivas o negativas indican modelos con mejor rendimiento. En este caso, la figura de la izquierda muestra que el modelo de interceptación aleatoria supera en general al modelo de regresión lineal (valores positivos), mientras que la de la derecha muestra que también supera al modelo de pendiente aleatoria (valores negativos).  
+
+```{r}
+# Obtain pointwise ELPD values
+elpd1 <- loo1$pointwise[,"elpd_loo"]
+elpd2 <- loo2$pointwise[,"elpd_loo"]
+elpd3 <- loo3$pointwise[,"elpd_loo"]
+
+# Build differences dataframe
+elpd_df <- tibble(county = bounce_data$county,
+                  diff12 = elpd2 - elpd1,
+                  diff23 = elpd3 - elpd2) %>% 
+  mutate(idx = 1:n())
+
+# Plot each difference individually
+pw_elpd1 <- ggplot(elpd_df, aes(x = idx, y = diff12, color = county)) +
+  geom_point(alpha=0.7) +
+  geom_hline(aes(yintercept=0)) +
+  theme_bw() + 
+  labs(x = "Index", y = "ELPD Difference",
+       title = "Random Intercept - Linear Regression ", color="County") +
+  theme(title = element_text(size=8))
+
+pw_elpd2 <- ggplot(elpd_df, aes(x = idx, y = diff23, color = county)) +
+  geom_point(alpha=0.7) +
+  geom_hline(aes(yintercept=0)) +
+  theme_bw()+
+  labs(x = "Index",
+       title = "Random Intercept/Slope - Random Intercept")+
+  theme(axis.title.y = element_blank(),
+        title = element_text(size=8))
+
+# Group figures from above
+annotate_figure(ggarrange(pw_elpd1, pw_elpd2, common.legend = TRUE, legend = "bottom"),
+                top = text_grob("LOO ELPD Pointwise Model comparisons, Random Intercept model performs best"))
+```
+
+Podemos mirar algunos diagnósticos de PSIS, para tener una idea de por qué la intercepción aleatoria supera la pendiente aleatoria. A continuación están los valores para el Pareto k k^
+
+diagnóstico que se relaciona con la variación de este tipo de muestreador de importancia.
+
+Brevemente, k^<0,5
+indica que los pesos de importancia tienen una varianza finita y el modelo ha convergido, lo que se traduce en que el modelo tiene una baja RMSE. Si en lugar de 0,5≤k^<0,7 entonces las ponderaciones de importancia de la PSIS tienen una varianza finita, sin embargo la convergencia se ralentiza a medida que aumentamos el valor. Si el valor es k^>0.7
+
+entonces no podemos asegurar la convergencia y el valor estimado no es fiable.
+
+En nuestro caso, ninguno es mayor de 0.5 sin embargo podemos notar que el modelo de intercepción aleatoria resuelve estos valores mejor que la pendiente aleatoria (k^intercepción<k^pendiente
+y están estrechamente distribuidos alrededor de y=0)
+
+```{r}
+# Get khat values
+k_rintercept <- loo2$psis_object$diagnostics$pareto_k
+k_rslope <- loo3$psis_object$diagnostics$pareto_k
+
+# Plot values
+tibble(idx = seq_along(k_rintercept), 
+       r_intercept = k_rintercept,
+       r_slope = k_rslope) %>% 
+  pivot_longer(cols = -idx) %>% 
+  ggplot(., aes(x = idx, y = value, color = name)) +
+  geom_point(alpha=0.5) +
+  geom_hline(aes(yintercept=0)) +
+  theme_bw() +
+  ylim(-1,1) +
+  facet_wrap(~ name) +
+  labs(y = expression(hat(k)), x ="Observation Index") +
+  ggtitle("Pareto-k diagnostic (PSIS diagnostic), no influence points (k<0.7)",
+          subtitle = "Random intercept models resolves left observation better")
+```
+
+# Modelo final
+
+De los diagnósticos anteriores queda claro que el mejor modelo es el de interceptación aleatoria, que resumo a continuación sus efectos
+
+```{r}
+#Posterior estimates
+post_beta_means <- bayes_rintercept %>% 
+  recover_types(bayes_rintercept) %>% 
+  gather_draws(b_Intercept, b_std_age, sigma,
+               sd_county__Intercept) %>% 
+  median_hdi() %>% 
+  dplyr::select(1:4)
+
+kable(post_beta_means, col.names = c("Variable", "Estimate", "Q2.5", "Q97.5"),
+      caption = "Random Intercept Fixed Effects Posterior Median and 95% HPDI ") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>%
+  row_spec(0, background = "#4CAF50", color="#FFF")  %>% 
+  scroll_box(width = "100%", height = "200px") 
+```
+```{r}
+# Random effect estimates + 95% HDPI
+bayes_rintercept %>% 
+  spread_draws(r_county[county]) %>%
+  ggplot(aes(y = fct_rev(county), x = r_county, fill=fct_rev(county))) +
+  geom_vline(aes(xintercept=0), alpha=0.5, linetype=2) +
+  stat_halfeyeh(.width = c(0.5, .95), point_interval= median_hdi,
+                alpha=0.8) +
+  labs(x = "Estimate Values", y = "County" ) +
+  ggtitle("Random Intercept Estimates per county",
+          subtitle = "Median + 95% HPD Interval ") +
+  theme_bw() +
+  theme(legend.position = "None")
+```
+
+También podemos visualizar las líneas de predicción posteriores esperadas y la incertidumbre asociada usando add_fitted_draws
+
+```{r}
+bounce_data %>% 
+  group_by(county) %>% 
+  data_grid(std_age = seq_range(std_age, n = 101)) %>% 
+  add_fitted_draws(bayes_rintercept, n=100) %>%
+  ggplot(aes(x = std_age, y = bounce_time, color = ordered(county))) +
+  stat_lineribbon(aes(y = .value), alpha=0.9) +
+  geom_point(data = bounce_data, alpha=0.7) +
+  theme_bw() +
+  scale_fill_brewer(palette = "Greys") +
+  scale_color_brewer(palette = "Dark2", guide="none") +
+  facet_wrap(~county, scales = "free") +
+  theme(legend.position = "bottom",
+        legend.text = element_text(size=8),
+        legend.title = element_text(size=8),
+        axis.title = element_text(size=8),
+        axis.text = element_text(size=8)) +
+  labs(fill= "Confidence level", x = "Age (standardize)", y="Bounce time (s)") +
+  ggtitle("Expected Posterior predicted fits + 95% CI",
+          subtitle = "Counties with less samples exhibit higher uncertainty")
+```
+
+# References
+
+    Gelman, A., Carlin, J. B., Stern, H. S., Dunson, D. B., Vehtari, A., & Rubin, D. B. (2013). Bayesian data analysis. CRC press.
+
+    Gabry, Jonah, et al. “Visualization in Bayesian workflow.” Journal of the Royal Statistical Society: Series A (Statistics in Society) 182.2 (2019): 389–402.
+
+    BRMS. https://paul-buerkner.github.io/brms/
+    
+    https://htmlpreview.github.io/?https://github.com/ecoronado92/towards_data_science/blob/master/hierarchical_models/bayes_lmm/R/bayesian_linear_mixed_model.html
+
+
+
+
+
+
+
+
+  
+    
+```{r}
+library(tidyverse)
+
+sim_df <- tibble(sim_no = integer(),
+                 raw = numeric(),
+                 y_sim = numeric())
+
+# Generate a flip-book of simulations
+for (i in seq(10)){
+  set.seed(i)
+  
+  # Variance / std deviation priors
+  tau <- abs(rnorm(1, 0, sd = 10))      # within-county
+  sigma <- abs(rnorm(1, 0, sd = 100))   # population
+  epsilon <- rnorm(nrow(bounce_data), mean=0, sd=sigma)
+  
+  # Fixed / Random effects priors
+  b0 <- rnorm(8, mean=0, sd=tau)
+  beta0 <- rnorm(1, mean=200, sd=1)
+  beta1 <- rnorm(1, mean=4, sd=1)
+
+  yhat <- beta0 + b0[bounce_data$county] + beta1*bounce_data$std_age + epsilon
+  
+  # Simulated df
+  sims <- tibble(sim_no = i,
+                 raw = bounce_data$bounce_time,
+                 y_sim = yhat )
+  
+  sim_df <- bind_rows(sim_df, sims)
+  
+}
+```
+
+```{python}
+import numpy as np
+import pandas as pd
+
+# Get data information
+county_idx = bounce_data.county.cat.codes.values 
+y_obs = bounce_data.bounce_time.values
+std_age = bounce_data.std_age.values
+
+sim_df = pd.DataFrame()
+
+for i in range(20):
+    np.random.seed(i)
+    
+    # Variance/ std deviation priors
+    tau0 = np.abs(np.random.normal(loc=0.0, scale=10.0, size=1)) # within-county
+    sigma = np.abs(np.random.normal(loc=0.0, scale=100.0, size=1)) # population
+    epsilon = np.random.normal(loc=0.0, scale=sigma, size=bounce_data.shape[0])
+
+    # Fixed / Random effect priors
+    b0 = np.random.normal(loc=0.0, scale=tau0, 
+                          size=len(bounce_data.county.unique()))
+    
+    beta0 = np.random.normal(loc=200.0, scale=1.0, size=1)
+    beta1 = np.random.normal(loc=4, scale=1.0, size=1)
+
+    yhat = beta0 + b0[county_idx] + beta1*std_age + epsilon
+    
+    ys = np.c_[y_obs, yhat]
+    
+    tmp = pd.DataFrame(ys, columns=['obs','sim'])
+    tmp['sim_no'] = i
+    
+    sim_df = sim_df.append(tmp)
+```
+

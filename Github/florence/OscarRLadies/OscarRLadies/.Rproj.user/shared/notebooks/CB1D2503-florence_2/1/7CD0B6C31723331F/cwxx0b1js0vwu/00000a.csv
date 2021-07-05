@@ -1,0 +1,3 @@
+"0",""
+"0","# Gráfico Q-Q"
+"0","qqnorm( data$muertes_otras_anual) # la nube de puntos "

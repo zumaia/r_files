@@ -1,0 +1,166 @@
+---
+title: "proyecto 1"
+output:
+  pdf_document:
+    latex_engine: xelatex
+  html_document: default
+always_allow_html: true
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+---
+title: "Tu primer modelo de machine learning". D?a 2
+Autor: www.DataScience4Business.com
+output: html_notebook
+editor_options: 
+  chunk_output_type: console
+---
+
+0.Opciones generales
+```{r}
+options(scipen=999)#Desactiva la notacion cientifica
+```
+
+1.Instalamos y cargamos las librer?as necesarias 
+```{r eval=FALSE, include=FALSE}
+#Instalar librer?as
+install.packages('dplyr') #para manipular datos
+install.packages('skimr') #para exploraci?n inicial
+install.packages('lubridate') #para manipular fechas
+install.packages('tidyr') #para manipular datos
+install.packages('ggplot2') #para hacer gr?ficos
+
+#Cargar librer?as
+library(dplyr)
+library(skimr)
+library(lubridate)
+library(tidyr)
+library(ggplot2)
+```
+```{r}
+packages <- c("dplyr", "skimr", "lubridate","tidyr","ggplot2")
+newpack  = packages[!(packages %in% installed.packages()[,"Package"])]
+
+if(length(newpack)) install.packages(newpack)
+a=lapply(packages, library, character.only=TRUE)
+```
+
+2.Cargamos los datos
+```{r}
+df <- read.csv(file = 'DataSetFallosMaquina.csv',sep=',')
+```
+
+3.An?lisis inicial
+```{r}
+#Visi?n general
+glimpse(df)
+skim(df)
+```
+Conclusiones:
+No hay nulos
+Problemas con tipos de variables:
+- Measure2 y Measure3 tambi?n parecen m?s factores que enteros
+- Viendo el m?nimo y el p25 de Temperature parece que tiene at?picos
+
+Analizamos en mayor detalle la tempertura
+```{r}
+ggplot(df,x=1) + geom_boxplot(aes(y=Temperature))
+```
+Conclusi?n: efectivamente vemos que son s?lo 4 puntos
+
+4.Calidad de datos
+```{r}
+#Corregimos los tipos de variables y los at?picos
+df <- df %>%
+  mutate(Measure2 = as.factor(Measure2), #Corregimos Measure2
+         Measure3 = as.factor(Measure3)) %>% #Corregimos Measure3 
+  filter(Temperature > 50) #eliminamos los 4 at?picos de temperature
+```
+
+5.An?lisis exploratorio de variables (EDA)
+```{r}
+#Exploramos las de tipo factor
+df %>%
+  select_if(is.factor) %>%
+  gather() %>%
+  ggplot(aes(value)) + geom_bar() + facet_wrap(~key,scales='free') +
+  theme(axis.text=element_text(size=6))#esto es para cambiar el tama?o del texto del eje y que se lea bien
+
+#Y las de tipo entero
+df %>%
+  select_if(is.integer) %>%
+  gather() %>%
+  ggplot(aes(value)) + geom_density() + facet_wrap(~key,scales='free') +
+  theme(axis.text=element_text(size=6))#esto es para cambiar el tama?o del texto del eje y que se lea bien
+
+#Hacemos an?lisis de correlaciones
+df %>%
+  select_if(is.integer) %>%
+  cor() %>% 
+  round(digits = 2)
+
+#Hacemos un zoom sobre el desbalanceo de la variable target
+table(df$Failure)
+```
+Conclusiones:
+No se perciben patrones raros en las variables
+Las variables de medidas no correlacionan
+La variable target est? muy desbalanceada
+
+6.Transformaci?n de variables
+No son necesarias grandes transformaciones porque el fichero ya viene muy limpio (no pasa as? en la realidad)
+
+Tampoco vamos a crear variables sint?ticas (nuevas variables) que s? har?amos en la realidad (por ej n?mero de fallos del mismo equipo, etc.)
+
+Pero s? vamos a tener que trabajar sobre el balanceo de la variable target
+```{r}
+#Vamos a balancear usando la t?cnica del inframuestreo:
+#Comprobamos la penetraci?n exacta de la target
+#Tenemos 81 sis que sobre el total de casos son un 0,9%:
+81/nrow(df) * 100
+
+#Para tener casi un 10% necesitar?amos incrementar la proporci?n aprox en x10
+#Entonces vamos a reducir los nos para que salga aprox esa proporci?n
+#Nuevo df de nos
+set.seed(1234) #para que nos salga lo mismo
+df_nos <- df %>%
+  filter(Failure == 'No') %>%
+  sample_frac(size = 0.08)
+#Df de sis
+df_sis <- df %>% filter(Failure == 'Yes')
+#Y los unimos de nuevo en un nuevo df reducido
+df_red <- rbind(df_nos,df_sis)
+#Comprobamos de nuevo la penetaci?n de la target
+count(df_red,Failure)
+81/nrow(df_red) * 100
+```
+Ahora ya tenmos un dataset donde la target tiene un 10% de penetraci?n (que sigue siendo poco pero lo dejaremos as?)
+
+7.Modelizaci?n
+
+(Continuaremos desde aqu? en el tercer video, pon atenci?n al email que te llegar? porque contienen al link al notebook a usar en el video 3)

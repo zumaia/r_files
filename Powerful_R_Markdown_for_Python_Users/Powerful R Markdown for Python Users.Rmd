@@ -1,0 +1,86 @@
+---
+title: "My R Markdown Notebook"
+author: 
+    - Rahul Bhadani^[The University of Arizona, rahulbhadani@email.arizona.edu]
+date: "`r format(Sys.time(), '%d %B %Y')`"
+bibliography: citations.bib
+output:
+  
+  pdf_document:
+    citation_package: natbib
+    keep_tex: yes
+    number_sections: yes
+  html_notebook: default
+  html_document:
+    df_print: paged
+classoption:
+- onecolumn
+header-includes:
+- \usepackage[none]{hyphenat}
+- \usepackage{physics}
+- \graphicspath{ {figures/} }
+- \usepackage{color}
+- \definecolor{ocre}{RGB}{243,102,25}
+- \usepackage[font={color=ocre,bf},labelfont=bf]{caption}
+- \usepackage{hyperref}
+- \hypersetup{colorlinks=true,citecolor=blue}
+- \def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+keep_tex: yes
+abstract: This is my abstract
+---
+# Section 1
+# Section 2
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+library(reticulate)
+use_condaenv("r-reticulate")
+#py_install("pandas", pip = TRUE)
+py_module_available("pandas")
+#py_install("seaborn", pip = TRUE)
+py_module_available("seaborn")
+```
+
+```{r, echo=T,eval=T,warning=FALSE, fig.height = 4, fig.width = 5}
+library('nloptr')
+hn <- function(x, n)
+{
+    hret <- 0
+    if (n == 0)
+    {
+       hret <- x + 2*x
+    }
+    else
+    {
+       hret <- x - 2*x
+    }
+    return (hret)
+}
+```
+```{python}
+libraimport pandas as pd
+import seaborn as sns
+iris = sns.load_dataset('iris')
+iris.head()
+iris['sepal_length'].plot()
+```
+
+
+```{python, engine.path =  "/home/oscar/.local/share/r-miniconda/envs/r-reticulate/bin/conda-env", fig.height = 3, fig.width = 6}
+import pandas as pd
+import seaborn as sns
+iris = sns.load_dataset('iris')
+iris.head()
+iris['sepal_length'].plot()
+```
+
+
+```{bash, engine.opts='-l'}
+source ~/.bashrc
+source /opt/ros/melodic/setup.bash
+source ~/catkin_ws/devel/setup.bash
+pwd
+ls
+```

@@ -1,0 +1,1119 @@
+---
+title: 'Cervezas Artesanas'
+author: "Autor: Oscar Rojo Martín"
+date: "Abril 2020"
+output:
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+    includes:
+      in_header: header.html
+  word_document: default
+  pdf_document:
+    highlight: zenburn
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+Cervezas Artesanas
+
+# Introducción
+
+
+
+Debido a mi afición por la Cerveza Artesana, he seleccionado de Kaggle el dataset “beer-recipes” https://www.kaggle.com/jtrofe/beer-recipes
+
+## Descripción:
+
+
+Este es un conjunto de datos de 75.000 cervezas caseras con más de 176 estilos diferentes. Los registros de cerveza son reportados por los usuarios y se clasifican de acuerdo a uno de los 176 estilos diferentes. Estas recetas entran tanto o tan poco en detalle como el usuario proporcionó, pero hay al menos 5 columnas útiles donde se introdujeron datos para cada una: Gravedad Original, Gravedad Final, ABV, IBU, y Color
+
+## Contenido
+
+Datos básicos de las recetas de cerveza presentadas por los usuarios y raspadas de Brewer's Friend. Todas las columnas están estandarizadas excepto "Método de cebado" y "Cantidad de cebado", que parece que permite a los usuarios escribir lo que quieran.
+Agradecimientos
+
+El sitio Brewer's Friend permite a los usuarios compartir sus recetas de cerveza casera. Este conjunto de datos contiene una selección de las recetas subidas hasta ahora.
+Inspiración
+
+## ¿Qué hay en la cerveza casera?
+
+Sería interesante ver si los datos proporcionados son suficientes para definir cada clase o si hay patrones no descubiertos. En el futuro podría ser posible revisar y raspar información más detallada para cada receta, como la levadura y los lúpulos específicos utilizados.
+
+## Detalle de las variables Principales:
+
+* ABV (Alcohol By Volume)
+
+Alcohol por Volumen. Expresado como porcentaje (%), se utiliza como la medida de la intensidad del alcohol, basado en la proporción de su contenido por volumen de cerveza.
+
+* stilos de Cerveza
+
+Los estilos de cerveza son las categorías mediante las cuales se identifican y clasifican las cervezas en base a sus características de apariencia, aroma, sabor y sensación en boca, establecidas mediante un rango aproximado de estadísticas vitales.
+
+* IBU (International Bitterness Unit)
+
+Unidad Internacional de amargor. Es la medida utilizada usada para definir el amargor de una cerveza. Un IBU equivale a un miligramo de iso-alfa-ácidos disueltos en un litro de cerveza. Cuanto mayor es el valor, más amarga es la cerveza.
+
+* Color:
+
+El color de la cerveza, depende principalmente, del tipo o tipos de maltas que se utilizan durante su elaboración.  Hay 2 metodos el Americano (SRM) y el europeo (EBC)
+
+
+
+# El Objetivo: 
+
+Analizar si hay relación de los ingredientes y caracteristicas de cada cerveza que podamos obtener un patron de clasificación de las mismas, a pesar de su estilo.
+
+
+
+
+# Limpieza y preparación entorno trabajo
+```{r Limpieza y preparación}
+# Limpiamos el entorno de Trabajo
+rm(list=ls())
+
+# Limpiamos la consola
+cat("\014")
+
+# Comprobamos que está bien establecido el directorio
+getwd()
+dir()
+```
+```{r Directorio de trabajo, message=FALSE, warning=FALSE}
+#indicamos el directorio de trabajo
+setwd("~/Documentos/R/Cerveza")
+```
+# Carga de librerias
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+
+packages <- c("psych", "dplyr", "skimr", "magrittr", "stringr", "epiDisplay", "summarytools","GGally", "ggplot2", "corrplot" , "githubinstall", "e1071", "purrr")
+newpack  = packages[!(packages %in% installed.packages()[,"Package"])]
+
+if(length(newpack)) install.packages(newpack)
+a=lapply(packages, library, character.only=TRUE)
+```
+
+# Descarga Database
+
+Utilizaré un dataset proveniente de "kaggle"
+
+Debido a la restricción que ofrece para poder descargar vía R su Dataset, voy a utilizar la terminal y mediante bash lo voy a descargar y descomprimir. 
+
+Este semestre estoy tambien matriculado en "Programación en Scripting"
+
+Para obtener la url y descargar el dataset utilizo la extensión para Chrome wget/curl y realizo la siguientes etapas:
+
+    1 - Instalo la extensión.
+
+    2 - Empiezo a descargar y lo paro.
+
+    3 - Consigo el link de la extensión.
+
+    4 - wget o curl + el link.
+
+ Descargo el fichero:
+Instalar kaggle - utilizado el terminal mediante comandos bash.
+
+```{bash install kaggle}
+
+
+# pip install kaggle
+```
+
+Obtengo el dataset - utilizado el terminal mediante comandos bash.
+
+```{bash descargar el dataset, eval=FALSE, include=FALSE}
+kaggle datasets download -d jtrofe/beer-recipes
+```
+
+Eliminio los posibles ficheros que pudiera tener y descomprimo. - utilizado el terminal mediante comandos bash.
+
+```{bash unzip, eval=FALSE, include=FALSE}
+rm -f recipeData.csv
+rm -f styleData.csv
+
+ls
+unzip beer-recipes.zip 
+```
+Descomprimo.
+```{r Descomprimir}
+unzip(zipfile = "/home/oscar/Descargas/beer-recipes.zip", exdir = "/home/oscar/Documentos/R/Cerveza/data")
+```
+
+El dataset que voy a utilizar es el “recipeData.csv” de 13mb. No utilizo el styleData ya que dichos datos están incorporados en el anterior.
+
+
+```{r Leer el CSV. Mostrar primeras lineas, Nombre de las columnas y Clase de Dataset}
+recipeData <- read.csv("~/Documentos/R/Cerveza/data/recipeData.csv", encoding = "latin1")
+head(recipeData)
+print("Nombre de  las columnas: ")
+names(recipeData)
+print("Clase: ")
+class(recipeData)
+```
+
+# Exploración
+```{r Dimensión, Longitud y Estructurad}
+print("Dimensión: ")
+dim(recipeData)
+print("Número de columnas: ")
+length(recipeData)
+print("Estructura: ")
+str(recipeData)
+```
+
+Primera eliminación de columnas no necesarias
+
+```{r Eliminamos columnas. Summary y Glimpse}
+data <- dplyr::select(recipeData,-BeerID, -Name, -URL, -PrimingMethod, -PrimingMethod,-UserId, -StyleID)
+
+summary(data)
+
+glimpse(data)
+```
+```{r Describe dataset}
+# library(psych)
+describe(data)
+```
+```{r Busqueda NA y valores vacios}
+# valores vacios
+print("Mostrar variables con campos na")
+which (is.na(data))
+print("Es cierto que hay valores  na?")
+any(is.na(data))
+print("Suma valores na")
+sum(is.na(data))
+print("Mostrar variables con campos na")
+colSums(is.na(data))
+print("Mostrar variables con datos N/A")
+colSums(data=="N/A")
+print("Valores con integrogación")
+colSums(data=="?")
+print("Valores con espacios en blanco")
+colSums(data==" ")
+```
+```{r Sustitución N/A por NA}
+data$Style <- gsub("N/A", NA, data$Style, fixed = TRUE)
+data$BoilSize <- gsub("N/A", NA, data$BoilSize, fixed = TRUE)
+data$PitchRate <- gsub("N/A",NA, data$PitchRate, fixed = TRUE)
+data$Style <- gsub("N/A",NA, data$Style, fixed = TRUE)
+data$BoilGravity <- gsub("N/A",NA, data$BoilGravity, fixed = TRUE)
+
+
+```
+
+```{r Eliminación de varias columnas y filas con valores NA, include=FALSE}
+# Elimino mas atributos que contienen muchos valores N/A
+df = data[,!(names(data) %in% c("MashThickness","PrimaryTemp", "PrimaryTemp", "PrimingAmount", "PitchRate"))]
+# elimino todas las filas que tengan valores nulos
+na.omit(df)
+```
+
+```{r Datos completos}
+# me quedo con los datos completos
+
+completos <- complete.cases(df)
+
+datos <- df[completos,]
+
+```
+```{r Buscamos valores vacios /na}
+# valores vacios
+print("Mostrar variables con campos na")
+which (is.na(datos))
+print("Es cierto que hay valores  na?")
+any(is.na(datos))
+print("Suma valores na")
+sum(is.na(datos))
+print("Mostrar variables con campos na")
+colSums(is.na(datos))
+print("Mostrar variables con datos N/A")
+colSums(datos=="N/A")
+print("Valores con integrogación")
+colSums(datos=="?")
+print("Valores con espacios en blanco")
+colSums(datos==" ")
+```
+```{r Transformación de datos}
+# Modificar los estilos en mayuscula
+# library(stringr)
+datos$Style <- str_to_upper(datos$Style, locale = "en")  #vocablos en ingles
+# el resto de vairables character en minusculas
+datos$BoilSize <- str_to_lower(datos$BoilSize, locale = "en")
+datos$BoilGravity <- str_to_lower(datos$BoilGravity, locale = "en")
+# Elimino espacios en blanco
+datos$Style <- str_trim(datos$Style, side = "both")
+# Separo la columna Style en 2 partes
+
+datos <- datos %>%
+  tidyr::separate(Style, c("Estilo", "Clase", "Otros"), sep = " ", fill="right")
+
+# Elimino la columna "Otros"
+datos <- dplyr::select(datos, -Otros)
+# Sustituyo valores na de la columna clase con los valores de la columna Estilo
+datos$Clase[is.na(datos$Clase)]<- as.character(datos$Estilo[is.na(datos$Clase)])
+# Ref. https://stackoverflow.com/questions/15629885/replace-na-in-column-with-value-in-adjacent-column
+
+# Relleno el espacio en blanco en Clase indicando "otros"
+datos$Clase <- sub("^$", "OTHERS", datos$Clase)
+
+# Ref. https://stackoverflow.com/questions/21243588/replace-blank-cells-with-character
+
+# Elimino caracteres especiales
+
+datos$Clase <- gsub("[[:punct:]]", "", datos$Clase)
+
+```
+```{r Fercuencia de los atributos Estilo y Clase, eval=FALSE, include=FALSE}
+# library(summarytools)
+freq(datos$Estilo, order = "freq")%>%
+  head(15)
+freq(datos$Clase, order = "freq")%>%
+  head(15)
+```
+Reducción dataset en 5 tipos de cerverza
+```{r Reducción Dataset centrandonos en 5 clases de cerveza}
+# Seleccionamos las Clases de cerveza por nº de frecuencia, hasta que llega a 50% del total y poder obtener clusteres bien definicos
+top_data1 <- filter(datos, Clase %in% c("IPA","PALE","STOUT","ALE","PORTER"))
+```
+Reduccion de observaciones
+```{r Reducción del nº  de observaciones}
+# Dado que el dataset es de tamaño muy grande, reduzco a 1000 primeras filas aleatorias sin reposición
+
+
+top_data <- top_data1[sample(nrow(top_data1), 1000, replace=FALSE),]
+```
+
+Nuevo resumen de datos
+```{r Resumen de datos}
+skimr::skim(top_data)
+```
+Convierto atrubutos character a factor y a numeric
+```{r Convertir a factor y a numeric}
+# convierto la columna character a factor
+top_data$Estilo <- as.factor(top_data$Estilo)
+top_data$Clase <- as.factor(top_data$Clase)
+top_data$BoilSize <- as.factor(top_data$BoilSize)
+top_data$BoilGravity <- as.factor(top_data$BoilGravity)
+# convierto variables con mucho números únicos en númericos
+top_data$BoilSize <- as.numeric(top_data$BoilSize)
+top_data$BoilGravity <- as.numeric(top_data$BoilGravity)
+```
+
+Busco valores únicos
+```{r Valores únicos}
+unique(top_data$Estilo)
+unique(top_data$Clase)
+length(unique(unlist(top_data[c("Estilo")])))
+length(unique(unlist(top_data[c("Clase")])))
+```
+```{r Relación Estilo- Clase}
+agg <- aggregate(Estilo ~ Clase, top_data, function(x) length(unique(x)))
+agg
+```
+Matriz
+```{r Matriz dispersion}
+pairs.panels(top_data, pch=21,main="Gráfico 01.6: Matriz de Dispersión, Histograma y Correlación")
+```
+
+
+
+
+
+```{r Frecuencia vble: Clase}
+
+summarytools::freq(top_data$Clase, order = "freq")
+```
+
+```{r}
+# library(epiDisplay)
+
+epiDisplay::summ(top_data)
+
+
+tab1(top_data$Clase, sort.group = "decreasing", cum.percent = TRUE)
+tab1(top_data$Estilo, sort.group = "decreasing", cum.percent = TRUE)
+tab1(top_data$SugarScale, sort.group = "drecreasing", cum.percent = TRUE)
+tab1(top_data$BrewMethod, sort.group = "drecreasing", cum.percent = TRUE)
+```
+Guardo el Datamatrix
+```{r}
+write.csv(top_data, file  =  "data/top_data.csv", row.names = FALSE)
+```
+
+
+Convierto el dataframe en Datamatrix
+```{r DataMatrix}
+
+# Utilizando la libreria skimr obtenemos información adicional
+dfmatrix <- top_data
+
+cols <- c("Estilo","Clase","BoilSize","BoilGravity","SugarScale","BrewMethod")
+# Convertimos lo valores character a factor
+for (i in cols){
+  dfmatrix[,i] <- as.numeric(dfmatrix[,i])
+}
+
+skim(dfmatrix)
+```
+
+```{r GGpairs}
+
+ggpairs(dfmatrix)
+```
+# Relación entre variables
+```{r Correlacion}
+
+correl <- cor(dfmatrix, method = "pearson")
+print("Matriz de correlacion de Pearson")
+correl
+
+```
+
+
+```{r Correlacion variables}
+
+# Buscamos  las variables con mayor correlación, hemos realizado una selección entre 0.40 y 0.85
+correl_df <- as.data.frame(as.table(correl))
+correl_df_a <- subset(correl_df, abs(Freq) > 0.50 & abs(Freq) <0.85)
+  
+correl_df_a[order(correl_df_a$Freq),]
+
+```
+```{r}
+# Correlación cla
+cor_clase <- cor(dfmatrix[-2], dfmatrix$Clase)
+print(cor_clase)
+cor_clase1 <- as.data.frame(cor_clase)
+cor_clase1[order(abs(cor_clase1$V1)),]
+```
+Salvo la relación con Estilo, seleccionolas que me parecen más importantes
+
+Selecciono los mejores valores y reduzco el nº me observaciones
+```{r Seleccionamos los mejores atributos}
+# Elegimos las mejores opciones e incorporo IBU y ABV
+
+top_top <- dplyr::select(top_data, Clase, Color, BoilGravity, FG,  Efficiency, IBU, ABV)
+
+```
+Eliminamos los dataset que no necesitamos
+
+```{r Eliminar dataset RAW}
+rm(a, agg, data, datos, df, dfmatrix, recipeData, top_data1)
+```
+# Outliers
+Vamos detectar Outliers
+```{r}
+par(mfrow=c(2,3))
+boxplot(top_top$Color~top_top$Clase)
+boxplot(top_top$BoilGravity~top_top$Clase)
+boxplot(top_top$FG~top_top$Clase)
+boxplot(top_top$Efficiency~top_top$Clase)
+boxplot(top_top$IBU~top_top$Clase)
+boxplot(top_top$ABV~top_top$Clase)
+```
+
+```{r}
+boxplot(ABV ~ Clase, 
+        data = top_top,
+        main = "ABV por Clase")
+```
+```{r}
+par(mfrow=c(3,2))
+boxplot(top_top$Color~top_top$Clase)
+boxplot(top_top$BoilGravity~top_top$Clase)
+boxplot(top_top$FG~top_top$Clase)
+boxplot(top_top$Efficiency~top_top$Clase)
+boxplot(top_top$IBU~top_top$Clase)
+boxplot(top_top$ABV~top_top$Clase)
+```
+
+
+```{r Función Outliers}
+
+	
+# df es el dataFrame que recibimos (ej. activity)
+# colNameData es la columna de los datos (ej. "steps")
+# colNameBy es la columna por la que trocearemos (ej. "userId")
+outliersReplace <- function(df, colNameData, colNameBy){
+  # creamos una nueva columna llamada igual que colNameData pero con .R
+  colNameData.R <- paste(colNameData, "R", sep=".")
+  df[colNameData.R] <- df[colNameData]
+  
+  # obtenemos los IDs por los que partir el dataframe
+  IDs <- unique(df[,c(colNameBy)])
+  for (id in IDs){
+    data <- df[df[colNameBy] == id, c(colNameData) ]
+    
+    Q  <- quantile(data)
+    minimo <- Q[1]    # valor minimo
+    Q1     <- Q[2]    # primer cuartil
+    Me     <- Q[3]    # mediana
+    Q3     <- Q[4]    # tercer cuartil
+    maximo <- Q[5]    # valor maximo
+    IQR    <- Q3 - Q1
+    
+    lowLimit  <- max(minimo, Q1 - 1.7*IQR)
+    highLimit <- min(maximo, Q3 + 1.7*IQR)
+    
+    # todos los valores donde colNameBy es igual a id
+    # y el valor de colNameData es > Q3 + 1.5 * IQR
+    # lo reemplazamos por la mediana
+    df[df[colNameBy] == id & df[colNameData] > highLimit, c(colNameData.R)] <- Me
+    
+    # lo mismo para el umbral inferior
+    df[df[colNameBy] == id & df[colNameData] < lowLimit, c(colNameData.R)] <- Me
+    
+    cat(paste("El", colNameBy, id, "la mediana(", colNameData, ") ==", Me, "\n", sep=" " ))
+    
+  }
+  df   # devolvemos el valor del dataFrame
+}
+```
+
+```{r aplicamos función Outlier}
+top_top <- outliersReplace(top_top,"Color","Clase")
+top_top <- outliersReplace(top_top,"BoilGravity","Clase")
+
+top_top <- outliersReplace(top_top,"FG","Clase")
+top_top <- outliersReplace(top_top,"Efficiency","Clase")
+top_top <- outliersReplace(top_top,"IBU","Clase")
+top_top <- outliersReplace(top_top,"ABV","Clase")
+
+```
+
+Vemos el resultado
+```{r}
+par(mfrow = c(2,1))    # para ponerlos uno encima de otro
+ 
+boxplot(ABV   ~ Clase, data = top_top, main = "Sin reemplazo")
+boxplot(ABV.R ~ Clase, data = top_top, main = "Con reemplazo")
+```
+```{r}
+par(mfrow=c(3,2))
+boxplot(top_top$Color.R~top_top$Clase)
+boxplot(top_top$BoilGravity.R~top_top$Clase)
+boxplot(top_top$FG.R~top_top$Clase)
+boxplot(top_top$Efficiency.R~top_top$Clase)
+boxplot(top_top$IBU.R~top_top$Clase)
+boxplot(top_top$ABV.R~top_top$Clase)
+```
+```{r}
+head(top_top)
+```
+```{r}
+top_top <- dplyr::select(top_top, -Color, -BoilGravity, -FG, -Efficiency, -IBU, -ABV)
+names(top_top) <- c("Clase", "Color", "BoilGravity", "FG", "Efficiency", "IBU", "ABV")
+```
+```{r}
+str(top_top)
+```
+
+
+# Estructura de los datos transformados
+```{r Información estructura Top}
+
+skimr::skim(top_top)
+
+```
+
+# Discretización de datos
+```{r Consultar discretización}
+# ¿Con qué variables tendría sentido un proceso de discretización?
+apply(top_top,2, function(x) length(unique(x)))
+```
+```{r Separamos el Output del resto de variables}
+# Separamos el objetivo con el resto de objetivo. El objetivo es la clase de cerveza 
+top.resto <- top_top[,c(2:7)]
+```
+## Normalización datos Top
+```{r Normalización}
+normalize <- function(x){
+  return ((x-min(x))/(max(x)-min(x)))
+}
+
+top.resto$Color  <- normalize(top.resto$Color)
+top.resto$BoilGravity <- normalize(top.resto$BoilGravity)
+top.resto$FG <- normalize(top.resto$FG)
+top.resto$Efficiency <- normalize(top.resto$Efficiency)
+top.resto$IBU <- normalize(top.resto$IBU)
+top.resto$ABV <- normalize(top.resto$ABV)
+```
+
+
+# Matriz de Dispersión, Histograma y Correlación de las variables seleccionadas y normalizadas.
+```{r ggpairs valores top}
+ggpairs(top.resto, title ="Correlograma con ggpairs")
+```
+
+
+```{r Visualización correlacion}
+# Nice visualization of correlations
+ggcorr(top.resto, method = c("everything", "pearson"))
+
+
+```
+# Scatterplot de Variables
+```{r Scatterplot de Variables}
+textscatter <- function(data, mapping, ...) {
+   ggplot(data, mapping, ...) + geom_text()
+}
+
+ggpairs(
+  top_top, 
+  title="Scatterplot de Variables",
+  columns = c(2:7),
+  mapping=ggplot2::aes(colour = Clase, label = ABV))
+  lower = list(continuous = textscatter)
+
+```
+Scatterplor FG/BoilGravity
+```{r Scatterplor FG/BoilGravity}
+textscatter <- function(data, mapping, ...) {
+   ggplot(data, mapping, ...) + geom_text()
+}
+
+ggpairs(
+  top_top, 
+  title="Scatterplot of Variables",
+  columns = c(3:4),
+  mapping=ggplot2::aes(colour = Clase, label = ABV))
+  lower = list(continuous = textscatter)
+
+```
+Scatterplor ABV/IBU
+```{r Scatterplot ABV/IBU}
+textscatter <- function(data, mapping, ...) {
+   ggplot(data, mapping, ...) + geom_text()
+}
+
+ggpairs(
+  top_top, 
+  title="Scatterplot of Variables",
+  columns = c(6,7),
+  mapping=ggplot2::aes(colour = Clase, label = ABV))
+  lower = list(continuous = textscatter)
+
+```
+
+
+
+```{r Eliminar dataset correlacion}
+rm(correl, correl_df, correl_df_a)
+```
+Matriz Dispersión, Histograma y Correlación de datos límipios
+```{r Matriz Dispersión Histograma Correlación Datos limpios}
+
+
+pairs.panels(top.resto, pch=21,main="Matriz de Dispersión, Histograma y Correlación")
+# Seleccionamos los de mayor corrolación
+pairs.panels(top.resto[,c("BoilGravity","FG")], pch=21,main="Matriz de Dispersión, Histograma y Correlación - Boilgravity/FG")
+
+pairs.panels(top.resto[,c("IBU","ABV")], pch=21,main="Matriz de Dispersión, Histograma y Correlación - IBU/ABV")
+```
+
+# PCA
+Aplicaremos PCA a las variables continuas y usaremos la variable categórica para visualizar los PCs más tarde. Noten que en el siguiente código aplicamos una transformación de registro a las variables continuas como sugiere [1] y establecemos el centro y la escala. igual a VERDADERO en la llamada a prcomp para estandarizar las variables antes de la aplicación de PCA:
+
+```{r PCA}
+stats.pca <- prcomp(top.resto) 
+names(stats.pca)
+```
+## Analizamos los datos
+```{r PCA - stats}
+# # Aplicar PCA - escala. = VERDADERO es altamente El método de impresión devuelve la desviación estándar de cada uno de los cuatro PCs, y su rotación (o cargas), que son los coeficientes de las combinaciones lineales de las variables continuas.
+# print method
+print(stats.pca)
+```
+
+El método de trazado devuelve un trazado de las variaciones (eje y) asociadas a las PC (eje x). La figura que figura a continuación es útil para decidir cuántas PCs se deben retener para un análisis más detallado. En este simple caso con sólo 4 PCs esto no es una tarea difícil y podemos ver que las dos primeras PCs explican la mayor parte de la variabilidad de los datos.
+
+```{r Plot PCA}
+# plot method
+plot(stats.pca$x[, 1], stats.pca$x[, 2], col = top_top$Clase, main = "PCA", xlab = "PC1", ylab = "PC2")
+
+
+plot(stats.pca, type = "l")
+```
+El método de resumen describe la importancia de las PC. La primera fila describe de nuevo la desviación estándar asociada a cada PC. La segunda fila muestra la proporción de la varianza en los datos explicados por cada componente, mientras que la tercera fila describe la proporción acumulativa de la varianza explicada. Podemos ver allí que los tres primeros PCs representan más del {97%} de la varianza de los datos.
+
+```{r PCA summary}
+# summary method
+summary(stats.pca)
+```
+Podemos usar la función de predicción si observamos nuevos datos y queremos predecir los valores de sus PCs. Sólo para ilustrar, imaginemos que las dos últimas filas de los datos del dataset acaban de llegar y queremos ver cuáles son los valores de sus PCs:
+
+
+```{r PCA con las ultimas 2 lineas}
+# Predict PCs
+# Preción PC de las últimas 2 lineas
+predict(stats.pca, 
+        newdata=tail(top.resto, 2))
+```
+
+Grafico 2 primeros PC, que representa 84,9%
+```{r Grafico 2 primeros PC}
+library(devtools)
+install_github("vqv/ggbiplot")
+ 
+library(ggbiplot)
+g <- ggbiplot(stats.pca, obs.scale = 1, var.scale = 1, 
+              groups = top_top$Clase, ellipse = TRUE, 
+              circle = TRUE)
+g <- g + scale_color_discrete(name = '')
+g <- g + theme(legend.direction = 'horizontal', 
+               legend.position = 'top')
+print(g)
+```
+### PCA on caret package
+
+
+
+Como mencioné antes, es posible aplicar primero una transformación Box-Cox para corregir la asimetría, centrar y escalar cada variable y luego aplicar PCA en una llamada a la función de preproceso del paquete caret.
+```{r Caret}
+require(caret)
+trans = preProcess(top_top[,2:7], 
+                   method=c("BoxCox", "center", 
+                            "scale", "pca"))
+PC = predict(trans, top_top[,2:7])
+```
+Por defecto, la función mantiene sólo los PC necesarios para explicar al menos el 95% de la variabilidad de los datos, pero esto se puede cambiar a través del umbral de argumento.
+
+
+```{r}
+# Retained PCs
+head(PC, 3)
+
+# Loadings
+trans$rotation
+```
+### Visualización PCA
+```{r Visualización PCA}
+library("factoextra")
+
+res.pca <- prcomp(top.resto, scale = TRUE)
+fviz_pca_biplot(res.pca, col.ind = top_top$Clase,
+                palette = "jco", geom = "point")
+```
+
+
+La dimensión (Dim.) 1 y 2 retuvieron cerca del 61,1% (40% + 21,1%) del total de la información contenida en el conjunto de datos.
+Los individuos con un perfil similar se agrupan
+Las variables que están positivamente correlacionadas están en el mismo lado de las parcelas. Las variables que están negativamente correlacionadas están en el lado opuesto de los gráficos.
+
+
+
+
+
+
+## Comparamos PCA y SDV
+
+En primer lugar, el típico PCA de las muestras sería transponer los datos de manera que las muestras sean filas de la matriz de datos. 
+```{r}
+library(rafalib)
+clase <- as.character(top_top$Clase)
+group <- as.fumeric(clase)
+# transponemos
+
+# x <- t(top.resto)
+# Realizamos un PCA
+pc <- prcomp(top.resto)
+names(pc)
+plot(pc$x[, 1], pc$x[, 2], col = group, main = "PCA", xlab = "PC1", ylab = "PC2")
+```
+
+
+
+
+Este PCA equivale a realizar la SVD en los datos centrados, donde el centrado ocurre en las columnas. Podemos utilizar la función de barrido para realizar operaciones arbitrarias en las filas y columnas de una matriz. El segundo argumento especifica que queremos operar en las columnas (1 se usaría para las filas), y el tercero y cuarto argumentos especifican que queremos restar la media de las columnas.
+
+```{r}
+
+cx <- sweep(top.resto, 2, colMeans(top.resto), "-")
+sv <- svd(cx)
+names(sv)
+plot(sv$u[, 1], sv$u[, 2], col = group, main = "SVD", xlab = "U1", ylab = "U2")
+```
+
+Así que las columnas de U de la SVD corresponden a los componentes principales x en el PCA. Además, la matriz V de la SVD equivale a la matriz de rotación devuelta por el PCA.
+
+
+```{r}
+
+plot(sv$u[, 1], sv$u[, 2], col = group, main = "SVD", xlab = "U1", ylab = "U2")
+
+```
+
+
+
+
+
+```{r}
+
+plot(pc$x[, 1], pc$x[, 2], col = group, main = "PCA", xlab = "PC1", ylab = "PC2")
+
+plot(sv$u[, 1], sv$u[, 2], col = group, main = "SVD", xlab = "U1", ylab = "U2")
+```
+
+Así que las columnas de U de la SVD corresponden a los componentes principales x en el PCA. Además, la matriz V de la SVD equivale a la matriz de rotación devuelta por el PCA.
+
+```{r}
+sv$v[1:5, 1:5]
+
+pc$rotation[1:5, 1:5]
+```
+
+Los elementos diagonales de D de la SVD son proporcionales a las desviaciones estándar devueltas por PCA. La diferencia es que las desviaciones estándar del prcomp son desviaciones estándar de la muestra (el prcomp devuelve estimaciones no sesgadas de la varianza de la muestra, por lo tanto con la corrección n/(n-1)). Los elementos de D se forman tomando la suma de los cuadrados de los componentes principales pero sin dividirlos por el tamaño de la muestra.
+
+```{r}
+print("SDV")
+head(sv$d^2)
+
+
+print("PCA")
+head(pc$sdev^2)
+```
+```{r}
+
+head(sv$d^2/(ncol(top.resto) - 1))
+
+```
+Dividiendo las variaciones por la suma, obtenemos un gráfico de la relación de variación explicada por cada componente principal.
+```{r}
+plot(sv$d^2/sum(sv$d^2), xlim = c(0, 7), type = "b", pch = 16, xlab = "Componentes principales", 
+    ylab = "Varianza explicada")
+
+plot(sv$d^2/sum(sv$d^2), type = "b", pch = 16, xlab = "Componentes principales", 
+    ylab = "Varianza explicada")
+```
+Obsérvese que, al no centrar los datos antes de ejecutar el svd, se obtiene un trazado ligeramente diferente:
+
+```{r}
+svNoCenter <- svd(top.resto)
+plot(pc$x[, 1], pc$x[, 2], col = group, main = "PCA", xlab = "PC1", ylab = "PC2")
+points(0, 0, pch = 3, cex = 4, lwd = 4)
+
+
+plot(svNoCenter$u[, 1], svNoCenter$u[, 2], col = group, main = "SVD no centrada", 
+    xlab = "U1", ylab = "U2")
+```
+
+# Aprendizaje no supervisado
+
+## K-means
+### K-means con 4 centroides
+
+```{r}
+result<- kmeans(top.resto,4) #aplico k-means con n.. de centroides(k)=4
+result$size # Obtenemos el nº de grabaciones por cada cluster
+```
+```{r}
+result$centers # obtenemos el valor del centro del cluster(3 centers for k=4)
+```
+
+```{r}
+# Da el vector del cúmulo mostrando el cúmulo donde cae cada registro
+head(result$cluster, 100)
+```
+
+Verificamos el resultado del clustering
+```{r}
+par(mfrow=c(2,2), mar=c(5,4,2,2))
+plot(top.resto[c(1,2)], col=result$cluster)
+plot(top.resto[c(1,2)], col=top_top$Clase)
+plot(top.resto[c(3,4)], col=result$cluster)
+plot(top.resto[c(3,4)], col=top_top$Clase)
+par(mfrow=c(2,2), mar=c(5,4,2,2))
+plot(top.resto[c(5,6)], col=result$cluster)
+plot(top.resto[c(5,6)], col=top_top$Clase)
+plot(top.resto[c(1,6)], col=result$cluster)
+plot(top.resto[c(1,6)], col=top_top$Clase)
+par(mfrow=c(2,2), mar=c(5,4,2,2))
+plot(top.resto[c(1,3)], col=result$cluster)
+plot(top.resto[c(1,3)], col=top_top$Clase)
+plot(top.resto[c(2,4)], col=result$cluster)
+plot(top.resto[c(2,4)], col=top_top$Clase)
+par(mfrow=c(2,2), mar=c(5,4,2,2))
+plot(top.resto[c(1,5)], col=result$cluster)
+plot(top.resto[c(1,5)], col=top_top$Clase)
+plot(top.resto[c(3,5)], col=result$cluster)
+plot(top.resto[c(3,5)], col=top_top$Clase)
+par(mfrow=c(2,2), mar=c(5,4,2,2))
+plot(top.resto[c(1,4)], col=result$cluster)
+plot(top.resto[c(1,4)], col=top_top$Clase)
+plot(top.resto[c(3,2)], col=result$cluster)
+plot(top.resto[c(3,2)], col=top_top$Clase)
+par(mfrow=c(2,2), mar=c(5,4,2,2))
+plot(top.resto[c(6,2)], col=result$cluster)
+plot(top.resto[c(6,2)], col=top_top$Clase)
+plot(top.resto[c(5,4)], col=result$cluster)
+plot(top.resto[c(5,4)], col=top_top$Clase)
+```
+
+
+```{r}
+table(result$cluster,top_top$Clase)
+```
+Según la tabla, el cluster 1 estan IPA, en la 2, PORTER y STOUT en la 3 ninguna, y en la cuarta ALE y PALE 
+
+El número total de instancias correctamente clasificadas son: 786
+El número total de casos clasificados incorrectamente son: 214
+Exactitud = 786/(1000) = 0.786 i.e. nuestro modelo ha alcanzado un 78,6% de exactitud!
+
+### K-means con 3 centroides
+
+```{r}
+result<- kmeans(top.resto,3) #aplico k-means con n.. de centroides(k)=3
+result$size # Obtenemos el nº de grabaciones por cada cluster
+```
+```{r}
+result$centers # obtenemos el valor del centro del cluster(3 centers for k=3)
+```
+
+```{r}
+# Da el vector del cúmulo mostrando el cúmulo donde cae cada registro
+head(result$cluster, 100)
+```
+
+Verificamos el resultado del clustering
+```{r}
+par(mfrow=c(2,2), mar=c(5,4,2,2))
+plot(top.resto[c(1,2)], col=result$cluster)
+plot(top.resto[c(1,2)], col=top_top$Clase)
+plot(top.resto[c(3,4)], col=result$cluster)
+plot(top.resto[c(3,4)], col=top_top$Clase)
+par(mfrow=c(2,2), mar=c(5,4,2,2))
+plot(top.resto[c(5,6)], col=result$cluster)
+plot(top.resto[c(5,6)], col=top_top$Clase)
+plot(top.resto[c(1,6)], col=result$cluster)
+plot(top.resto[c(1,6)], col=top_top$Clase)
+par(mfrow=c(2,2), mar=c(5,4,2,2))
+plot(top.resto[c(1,3)], col=result$cluster)
+plot(top.resto[c(1,3)], col=top_top$Clase)
+plot(top.resto[c(2,4)], col=result$cluster)
+plot(top.resto[c(2,4)], col=top_top$Clase)
+par(mfrow=c(2,2), mar=c(5,4,2,2))
+plot(top.resto[c(1,5)], col=result$cluster)
+plot(top.resto[c(1,5)], col=top_top$Clase)
+plot(top.resto[c(3,5)], col=result$cluster)
+plot(top.resto[c(3,5)], col=top_top$Clase)
+par(mfrow=c(2,2), mar=c(5,4,2,2))
+plot(top.resto[c(1,4)], col=result$cluster)
+plot(top.resto[c(1,4)], col=top_top$Clase)
+plot(top.resto[c(3,2)], col=result$cluster)
+plot(top.resto[c(3,2)], col=top_top$Clase)
+par(mfrow=c(2,2), mar=c(5,4,2,2))
+plot(top.resto[c(6,2)], col=result$cluster)
+plot(top.resto[c(6,2)], col=top_top$Clase)
+plot(top.resto[c(5,4)], col=result$cluster)
+plot(top.resto[c(5,4)], col=top_top$Clase)
+```
+
+
+```{r}
+table(result$cluster,top_top$Clase)
+```
+Según la tabla, el cluster 1 estan ALE y PALE, en la 2, claramente IPA y en la tercera, PORTER y STOUT.
+
+El número total de instancias correctamente clasificadas son: 835
+El número total de casos clasificados incorrectamente son: 165
+Exactitud = 835/(835+165) = 0.835 i.e. nuestro modelo ha alcanzado un 83,5% de exactitud!
+
+### K-means con 2 centroides
+
+```{r}
+result<- kmeans(top.resto,2) #aplico k-means con n.. de centroides(k)=2
+result$size # Obtenemos el nº de grabaciones por cada cluster
+```
+```{r}
+result$centers # obtenemos el valor del centro del cluster(3 centers for k=2)
+```
+
+```{r}
+# Da el vector del cúmulo mostrando el cúmulo donde cae cada registro
+head(result$cluster, 100)
+```
+
+Verificamos el resultado del clustering
+```{r}
+par(mfrow=c(2,2), mar=c(5,4,2,2))
+plot(top.resto[c(1,2)], col=result$cluster)
+plot(top.resto[c(1,2)], col=top_top$Clase)
+plot(top.resto[c(3,4)], col=result$cluster)
+plot(top.resto[c(3,4)], col=top_top$Clase)
+par(mfrow=c(2,2), mar=c(5,4,2,2))
+plot(top.resto[c(5,6)], col=result$cluster)
+plot(top.resto[c(5,6)], col=top_top$Clase)
+plot(top.resto[c(1,6)], col=result$cluster)
+plot(top.resto[c(1,6)], col=top_top$Clase)
+par(mfrow=c(2,2), mar=c(5,4,2,2))
+plot(top.resto[c(1,3)], col=result$cluster)
+plot(top.resto[c(1,3)], col=top_top$Clase)
+plot(top.resto[c(2,4)], col=result$cluster)
+plot(top.resto[c(2,4)], col=top_top$Clase)
+par(mfrow=c(2,2), mar=c(5,4,2,2))
+plot(top.resto[c(1,5)], col=result$cluster)
+plot(top.resto[c(1,5)], col=top_top$Clase)
+plot(top.resto[c(3,5)], col=result$cluster)
+plot(top.resto[c(3,5)], col=top_top$Clase)
+par(mfrow=c(2,2), mar=c(5,4,2,2))
+plot(top.resto[c(1,4)], col=result$cluster)
+plot(top.resto[c(1,4)], col=top_top$Clase)
+plot(top.resto[c(3,2)], col=result$cluster)
+plot(top.resto[c(3,2)], col=top_top$Clase)
+par(mfrow=c(2,2), mar=c(5,4,2,2))
+plot(top.resto[c(6,2)], col=result$cluster)
+plot(top.resto[c(6,2)], col=top_top$Clase)
+plot(top.resto[c(5,4)], col=result$cluster)
+plot(top.resto[c(5,4)], col=top_top$Clase)
+```
+
+
+```{r}
+table(result$cluster,top_top$Clase)
+```
+Según la tabla, el cluster 2 estan ALE, IPA Y PALE y el cluster 1 están PORTER Y STOUT
+
+El número total de instancias correctamente clasificadas son: 995
+El número total de casos clasificados incorrectamente son: 5
+Exactitud = 995/(1000) = 0.995 i.e. nuestro modelo ha alcanzado un 99,% de exactitud!
+
+
+## Busqueda del nº de clusters
+
+```{r}
+library(factoextra)
+fviz_nbclust(x = top.resto, FUNcluster = kmeans, method = "wss", k.max = 7, 
+             diss = get_dist(top.resto, method = "euclidean"), nstart = 30)
+```
+
+```{r}
+# Este mismo análisis también puede realizarse sin recurrir a la función fviz_nbclust().
+
+calcular_totwithinss <- function(n_clusters, datos, iter.max=1000, nstart=50){
+  # Esta función aplica el algoritmo kmeans y devuelve la suma total de
+  # cuadrados internos.
+  cluster_kmeans <- kmeans(centers = n_clusters, x = top.resto, iter.max = iter.max,
+                           nstart = nstart)
+  return(cluster_kmeans$tot.withinss)
+}
+# library(purrr)
+# Se aplica esta función con para diferentes valores de k
+total_withinss <- map_dbl(.x = 1:7,
+                          .f = calcular_totwithinss,
+                          datos = top.resto)
+total_withinss
+```
+
+```{r}
+data.frame(n_clusters = 1:7, suma_cuadrados_internos = total_withinss) %>%
+  ggplot(aes(x = n_clusters, y = suma_cuadrados_internos)) +
+    geom_line() +
+    geom_point() +
+    scale_x_continuous(breaks = 1:7) +
+    labs(title = "Evolución de la suma total de cuadrados intra-cluster") +
+    theme_bw()
+```
+
+
+```{r eval=FALSE, include=FALSE}
+
+km_clusters <- kmeans(x = top.resto, centers = 3, nstart = 10)
+
+# Las funciones del paquete factoextra emplean el nombre de las filas del
+# dataframe que contiene los datos como identificador de las observaciones.
+# Esto permite añadir labels a los gráficos.
+fviz_cluster(object = km_clusters, data = top.resto, show.clust.cent = TRUE,
+             ellipse.type = "euclid", star.plot = TRUE, repel = TRUE) +
+  labs(title = "Resultados clustering K-means") +
+  theme_bw() +
+  theme(legend.position = "none")
+```
+
+
+## PAM 
+
+```{r}
+library(cluster)
+library(factoextra)
+fviz_nbclust(x = top.resto, FUNcluster = pam, method = "wss", k.max = 5,
+             diss = dist(top.resto, method = "manhattan"))
+```
+
+```{r}
+set.seed(123)
+pam_clusters <- pam(x = top.resto, k = 3, metric = "manhattan")
+pam_clusters
+```
+
+```{r}
+fviz_cluster(object = pam_clusters, data = top.resto, ellipse.type = "t",
+             repel = TRUE) +
+  theme_bw() +
+  labs(title = "Resultados clustering PAM") +
+  theme(legend.position = "none")
+```
+## CLARA
+
+```{r}
+library(cluster)
+library(factoextra)
+clara_clusters <- clara(x = top.resto, k = 3, metric = "manhattan", stand = TRUE,
+                        samples = 10, pamLike = TRUE)
+clara_clusters
+```
+
+```{r}
+fviz_cluster(object = clara_clusters, ellipse.type = "t", geom = "point",
+             pointsize = 2.5) +
+  theme_bw() +
+  labs(title = "Resultados clustering CLARA") +
+  theme(legend.position = "none")
+```
+## Hierarchical K-means clusteriong
+```{r}
+library(factoextra)
+# Se obtiene el dendrograma de hierarchical clustering para elegir el número de
+# clusters.
+set.seed(101)
+hc_euclidea_completo <- hclust(d = dist(x = top.resto, method = "euclidean"),
+                               method = "complete")
+fviz_dend(x = hc_euclidea_completo, cex = 0.5, main = "Linkage completo",
+          sub = "Distancia euclídea") +
+  theme(plot.title =  element_text(hjust = 0.5, size = 15))
+```
+
+
+
+
+
+
+
+
+# Referencias:
+
+https://www.r-bloggers.com/experimentation-with-unsupervised-learning/
+
+https://www.r-bloggers.com/computing-and-visualizing-pca-in-r/
+
+https://askubuntu.com/questions/161778/how-do-i-use-wget-curl-to-download-from-a-site-i-am-logged-into
+
+https://genomicsclass.github.io/book/pages/pca_svd.html 
+
+https://rpubs.com/Nitika/kmeans_Iris
+
+https://rpubs.com/Joaquin_AR/310338
+
+https://www.adictosaltrabajo.com/2019/11/28/deteccion-y-reemplazo-de-outliers-con-r/
+
+

@@ -1,0 +1,457 @@
+---
+title: "10 Tips for Choosing the Optimal Number of Clusters"
+output: html_document
+---
+
+# ref:. https://towardsdatascience.com/10-tips-for-choosing-the-optimal-number-of-clusters-277e93d72d92
+
+```{r}
+# Limpiamos el entorno de Trabajo
+rm(list=ls())
+
+# Limpiamos la consola
+cat("\014")
+
+
+
+```
+La agrupación es uno de los problemas más comunes de aprendizaje de las máquinas sin supervisión. La similitud entre las observaciones se define utilizando algunas medidas de distancia entre observaciones o medidas de distancia basadas en la correlación.
+
+Hay 5 clases de métodos de agrupación:
+
+    + Agrupación jerárquica                        Hierarchical Clustering
+    + Métodos de partición (k-means, PAM, CLARA)   Partitioning Methods (k-means, PAM, CLARA)
+    + Agrupación basada en la densidad             Density-Based Clustering
+    + Agrupación basada en modelos                 Model-based Clustering
+    + Agrupación difusa                            Fuzzy Clustering
+
+Mi deseo de escribir este post vino principalmente de la lectura del paquete clustree, la documentación dendextend, y el libro Practical Guide to Cluster Analysis in R escrito por Alboukadel Kassambara autor del paquete factoextra.
+
+# Conjunto de datos
+
+Usaré un conjunto de datos menos conocido del paquete de grupos: all.mammals.milk.1956, uno que no he visto antes.
+
+Este pequeño conjunto de datos contiene una lista de 25 mamíferos y los componentes de su leche (porcentajes de agua, proteínas, grasa, lactosa, cenizas) de John Hartigan, Clustering Algorithms, Wiley, 1975.
+
+Primero carguemos los paquetes necesarios.
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Importamos las librerias a utilizar
+
+packages <- c("tidyverse", "magrittr", "cluster", "cluster.datasets", "cowplot", "NbClust", "clValid", "ggfortify", "clustree", "dendextend", "factoextra", "FactoMineR", "corrplot", "GGally", "ggiraphExtra", "knitr","kableExtra", "ggExtra")
+newpack  = packages[!(packages %in% installed.packages()[,"Package"])]
+
+if(length(newpack)) install.packages(newpack)
+a=lapply(packages, library, character.only=TRUE)
+```
+
+```{r eval=FALSE, include=FALSE}
+library(tidyverse)
+library(magrittr)
+library(cluster)
+library(cluster.datasets)
+library(cowplot)
+library(NbClust)
+library(clValid)
+library(ggfortify)
+library(clustree)
+library(dendextend)
+library(factoextra)
+library(FactoMineR)
+library(corrplot)
+library(GGally)
+library(ggiraphExtra)
+library(knitr)
+library(kableExtra)
+```
+
+Cargamos los datos
+```{r pressure, echo=FALSE}
+data("all.mammals.milk.1956")
+raw_mammals <- all.mammals.milk.1956
+
+# subset dataset
+mammals <- raw_mammals %>% 
+  select(-name) 
+
+# set rownames
+mammals <- as_tibble(mammals)
+```
+
+Exploramos y visualizamos los datos
+
+```{r}
+# Glimpse the data set
+glimpse(mammals)
+```
+Todas las variables se expresan en forma numérica. ¿Qué hay de la distribución estadística?
+
+```{r}
+# Summary of data set
+summary(mammals) %>% 
+  kable() %>% 
+  kable_styling()
+```
+
+```{r}
+# Historgram for each attribute
+mammals %>% 
+  gather(Attributes, value, 1:5) %>% 
+  ggplot(aes(x=value)) + 
+  geom_histogram(fill = "lightblue2", color = "black") + 
+  facet_wrap(~Attributes, scales = "free_x") +
+  labs(x = "Value", y = "Frequency")
+```
+
+What’s the relationship between the different attributes? Use `corrplot()` to create correlation matrix.
+```{r}
+corrplot(cor(mammals), type = "upper", method = "ellipse", tl.cex = 0.9)
+```
+
+Cuando se tienen variables que se miden en diferentes escalas es útil escalar los datos.
+
+```{r}
+mammals_scaled <- scale(mammals)
+rownames(mammals_scaled) <- raw_mammals$name
+```
+
+La reducción de la dimensionalidad puede ayudar a la visualización de los datos (por ejemplo, el método PCA)
+```{r}
+res.pca <- PCA(mammals_scaled,  graph = FALSE)
+# Visualizar los valores propios/varianzas
+fviz_screeplot(res.pca, addlabels = TRUE, ylim = c(0, 70))
+```
+
+Estos son los 5 PCs que capturan el 80% de la variación. El gráfico del pantano muestra que PC1 capturó ~ 75% de la varianza.
+
+```{r}
+
+
+# Extract the results for variables
+var <- get_pca_var(res.pca)# Contributions of variables to PC1
+fviz_contrib(res.pca, choice = "var", axes = 1, top = 10)# Contributions of variables to PC2
+fviz_contrib(res.pca, choice = "var", axes = 2, top = 10)# Control variable colors using their contributions to the principle axis
+fviz_pca_var(res.pca, col.var="contrib",
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE # Avoid text overlapping
+             ) + theme_minimal() + ggtitle("Variables - PCA")
+```
+
+De estas visualizaciones se desprende que el agua y la lactosa tienden a aumentar juntas y que las proteínas, las cenizas y las grasas aumentan juntas; los dos grupos están inversamente relacionados.
+
+
+# Naïve (K-means) Approach
+
+Los métodos de agrupación de particiones, como k-means y Partitioning Around Medoids (PAM), requieren que se especifique el número de agrupaciones que se generarán.
+
+k-means clusters es probablemente uno de los métodos de partición más conocidos. La idea detrás de la agrupación k-means consiste en definir los clusters la variación total dentro de los clusters , lo que mide la compacidad de los clusters se minimiza.
+
+Podemos calcular k-means en R con la función kmeans():
+
+```{r}
+km2 <- kmeans(mammals_scaled, centers = 2, nstart = 30)
+km2
+```
+
+El ejemplo anterior agruparía los datos en dos grupos, centros = 2, e intentaría múltiples configuraciones iniciales, informando sobre la mejor de ellas. Por ejemplo, como este algoritmo es sensible a las posiciones iniciales de los centros de los cúmulos, añadir nstart = 30 generará 30 configuraciones iniciales y luego promediará todos los resultados de los centros.
+
+Dado que es necesario establecer el número de clusters (k) antes de empezar, puede ser ventajoso examinar varios valores diferentes de k.
+
+
+```{r}
+kmean_calc <- function(df, ...){
+  kmeans(df, scaled = ..., nstart = 30)
+}
+km2 <- kmean_calc(mammals_scaled, 2)
+km3 <- kmean_calc(mammals_scaled, 3)
+km4 <- kmeans(mammals_scaled, 4)
+km5 <- kmeans(mammals_scaled, 5)
+km6 <- kmeans(mammals_scaled, 6)
+km7 <- kmeans(mammals_scaled, 7)
+km8 <- kmeans(mammals_scaled, 8)
+km9 <- kmeans(mammals_scaled, 9)
+km10 <- kmeans(mammals_scaled, 10)
+km11 <- kmeans(mammals_scaled, 11)
+
+p1 <- fviz_cluster(km2, data = mammals_scaled, frame.type = "convex") + theme_minimal() + ggtitle("k = 2") 
+p2 <- fviz_cluster(km3, data = mammals_scaled, frame.type = "convex") + theme_minimal() + ggtitle("k = 3")
+p3 <- fviz_cluster(km4, data = mammals_scaled, frame.type = "convex") + theme_minimal() + ggtitle("k = 4")
+p4 <- fviz_cluster(km5, data = mammals_scaled, frame.type = "convex") + theme_minimal() + ggtitle("k = 5")
+p5 <- fviz_cluster(km6, data = mammals_scaled, frame.type = "convex") + theme_minimal() + ggtitle("k = 6")
+p6 <- fviz_cluster(km7, data = mammals_scaled, frame.type = "convex") + theme_minimal() + ggtitle("k = 7")
+
+plot_grid(p1, p2, p3, p4, p5, p6, labels = c("k2", "k3", "k4", "k5", "k6", "k7"))
+```
+
+Aunque esta evaluación visual nos dice dónde se producen las delineaciones entre los cúmulos, no nos dice cuál es el número óptimo de cúmulos.
+
+# Determinar el número óptimo de clusters
+
+En la literatura se han propuesto diversas medidas para evaluar los resultados de la agrupación. El término validación de la agrupación se utiliza para diseñar el procedimiento de evaluación de los resultados de un algoritmo de agrupación. Hay más de treinta índices y métodos para identificar el número óptimo de conglomerados, así que me centraré en algunos de ellos, incluyendo el muy cuidado paquete de conglomerados.
+
+#El método del "codo" The "Elbow" Method
+
+Probablemente el método más conocido, el método del codo, en el que se calcula y grafica la suma de los cuadrados de cada número de cúmulos, y el usuario busca un cambio de pendiente de empinada a poco profunda (un codo) para determinar el número óptimo de cúmulos. Este método es inexacto, pero aún así potencialmente útil.
+
+```{r}
+set.seed(31)
+# function to compute total within-cluster sum of squares
+fviz_nbclust(mammals_scaled, kmeans, method = "wss", k.max = 24) + theme_minimal() + ggtitle("the Elbow Method")
+```
+
+El método de la Curva del Codo es útil porque muestra cómo el aumento del número de los grupos contribuye a separar los grupos de una manera significativa, no de una manera marginal. La curva indica que las agrupaciones adicionales más allá de la tercera tienen poco valor (Véase [aquí] para una interpretación y aplicación más matemáticamente rigurosa de este método). El método del codo es bastante claro, si no una solución ingenua basada en la varianza intracluster. La estadística de la brecha es un método más sofisticado para tratar los datos que tienen una distribución sin agrupación obvia (se puede encontrar el número correcto de k para las distribuciones de datos globulares, distribuidos por Gauss, ligeramente desarticulados).
+
+# La Estadística de la Brecha
+
+La estadística de la brecha compara el total dentro de la variación intracluster para diferentes valores de k con sus valores esperados bajo una distribución de referencia nula de los datos. La estimación de los conglomerados óptimos será el valor que maximice la estadística de la brecha (es decir, que produzca la mayor estadística de la brecha). Esto significa que la estructura de agrupación está muy lejos de la distribución uniforme aleatoria de puntos.
+
+```{r}
+gap_stat <- clusGap(mammals_scaled, FUN = kmeans, nstart = 30, K.max = 24, B = 50)
+fviz_gap_stat(gap_stat) + theme_minimal() + ggtitle("fviz_gap_stat: Gap Statistic")
+```
+
+El gráfico de estadísticas de la brecha muestra las estadísticas por número de cúmulos (k) con errores estándar dibujados con segmentos verticales y el valor óptimo de k marcado con una línea azul punteada vertical. De acuerdo con esta observación k = 2 es el número óptimo de cúmulos en los datos.
+
+# El método de la silueta
+
+Otra visualización que puede ayudar a determinar el número óptimo de cúmulos se llama el método de la silueta. El método de la silueta media computa la silueta media de las observaciones para diferentes valores de k. El número óptimo de cúmulos k es el que maximiza la silueta media en un rango de posibles valores para k.
+
+```{r}
+fviz_nbclust(mammals_scaled, kmeans, method = "silhouette", k.max = 24) + 
+  theme_minimal() + 
+  ggtitle("The Silhouette Plot")
+```
+Esto también sugiere un óptimo de 2 grupos.
+
+#El método de la suma de los cuadrados  //  The Sum of Squares Method
+
+Otro método de validación de los conglomerados sería elegir el número óptimo de conglomerados minimizando la suma de cuadrados dentro del conglomerado (una medida de cuán estrecho es cada conglomerado) y maximizando la suma de cuadrados entre los conglomerados (una medida de cuán separado está cada conglomerado de los demás).
+```{r}
+ssc <- data.frame(
+  kmeans = c(2,3,4,5,6,7,8),
+  within_ss = c(mean(km2$withinss), mean(km3$withinss), mean(km4$withinss), mean(km5$withinss), mean(km6$withinss), mean(km7$withinss), mean(km8$withinss)),
+  between_ss = c(km2$betweenss, km3$betweenss, km4$betweenss, km5$betweenss, km6$betweenss, km7$betweenss, km8$betweenss)
+)
+ssc %<>% gather(., key = "measurement", value = value, -kmeans)
+
+# ssc$value <- log10(ssc$value)
+
+ssc %>% ggplot(., aes(x=kmeans, y=log10(value), fill = measurement)) + 
+  geom_bar(stat = "identity", position = "dodge") + ggtitle("Cluster Model Comparison") + 
+  xlab("Number of Clusters") + 
+  ylab("Log10 Total Sum of Squares") + 
+  scale_x_discrete(name = "Number of Clusters", limits = c("0", "2", "3", "4", "5", "6", "7", "8"))
+```
+
+De esta medición parece que 7 cúmulos serían la elección apropiada.
+
+# NbClust
+
+El paquete NbClust proporciona 30 índices para determinar el número pertinente de agrupaciones y propone a los usuarios el mejor esquema de agrupación a partir de los diferentes resultados obtenidos al variar todas las combinaciones de número de agrupaciones, medidas de distancia y métodos de agrupación.
+
+```{r}
+res.nbclust <- NbClust(mammals_scaled, distance = "euclidean",
+                  min.nc = 2, max.nc = 9, 
+                  method = "complete", index ="all")
+factoextra::fviz_nbclust(res.nbclust) + 
+  theme_minimal() + 
+  ggtitle("NbClust's optimal number of clusters")
+```
+Esto sugiere que el número óptimo de grupos es 3.
+
+# Clustree
+
+El método estadístico anterior produce una única puntuación que sólo considera un único conjunto de agrupaciones a la vez. El paquete de clusters R adopta un enfoque alternativo considerando cómo las muestras cambian de agrupación a medida que aumenta el número de clusters. Esto es útil para mostrar qué grupos son distintos y cuáles son inestables. No le dice explícitamente cuál es la elección de los clusters óptimos, pero es útil para explorar las posibles opciones.
+
+Echemos un vistazo a 1 a 11 clusters.
+
+```{r}
+tmp <- NULL
+for (k in 1:11){
+  tmp[k] <- kmeans(mammals_scaled, k, nstart = 30)
+}
+
+df <- data.frame(tmp)
+
+# add a prefix to the column names
+
+colnames(df) <- seq(1:11)
+colnames(df) <- paste0("k",colnames(df))
+# get individual PCA
+df.pca <- prcomp(df, center = TRUE, scale. = FALSE)
+
+ind.coord <- df.pca$x
+ind.coord <- ind.coord[,1:2]
+
+df <- bind_cols(as.data.frame(df), as.data.frame(ind.coord))
+
+clustree(df, prefix = "k")
+```
+
+En esta figura el tamaño de cada nodo corresponde al número de muestras de cada racimo, y las flechas están coloreadas según el número de muestras que recibe cada racimo. Un conjunto separado de flechas, las transparentes, llamadas proporción de nodos entrantes, también están coloreadas y muestran cómo las muestras de un grupo terminan en otro grupo - un indicador de la inestabilidad del grupo.
+
+En este gráfico vemos que a medida que pasamos de k=2 a k=3 un número de especies del grupo de la izquierda se reasignan al tercer grupo de la derecha. A medida que pasamos de k=8 a k=9 vemos un nodo con múltiples bordes entrantes, un indicador de que hemos sobre-agrupado los datos.
+
+También puede ser útil superponer esta dimensión a otras dimensiones de los datos, en particular a las que provienen de técnicas de reducción de la dimensionalidad. Podemos hacer esto usando la función clustree_overlay():
+
+```{r}
+df_subset <- df %>% select(1:8,12:13)
+
+clustree_overlay(df_subset, prefix = "k", x_value = "PC1", y_value = "PC2")
+```
+
+Prefiero verlo de lado, mostrando una de las dimensiones x o y contra la dimensión de la resolución.
+
+
+```{r}
+overlay_list <- clustree_overlay(df_subset, prefix = "k", x_value = "PC1", y_value = "PC2", plot_sides = TRUE)
+
+overlay_list$x_side
+
+overlay_list$y_side
+```
+
+
+Esto demuestra que podemos indicar la resolución correcta de la agrupación examinando los bordes y que podemos obtener demasiada información para evaluar la calidad de la agrupación.
+
+
+# Eligiendo el algoritmo apropiado
+
+¿Qué hay de la elección del algoritmo de agrupación apropiado? El paquete cValid puede utilizarse para comparar simultáneamente múltiples algoritmos de agrupación, para identificar el mejor enfoque de agrupación y el número óptimo de agrupaciones. Compararemos k-means, clustering jerárquico y PAM.
+
+```{r}
+intern <- clValid(mammals_scaled, nClust = 2:24,
+                  clMethods = c("hierarchical","kmeans","pam"), 
+                  validation = "internal")
+
+# Summary
+summary(intern) %>% 
+  kable() %>% 
+  kable_styling()
+```
+
+Conectividad y Silueta son ambas medidas de conectividad, mientras que el Índice Dunn es la relación entre la menor distancia entre las observaciones que no están en el mismo cúmulo y la mayor distancia dentro del cúmulo.
+Extracción de las características de los cúmulos
+
+Como ya se ha mencionado, es difícil evaluar la calidad de los resultados de la agrupación. No tenemos etiquetas verdaderas, así que no está claro cómo se puede medir "lo bien que funciona realmente" en términos de validación interna. Sin embargo, la agrupación es un excelente punto de partida de la AED para explorar las diferencias entre las agrupaciones con mayor detalle. Piensa en la agrupación como la fabricación de tallas de camisas. Podríamos elegir hacer sólo tres tallas: pequeña, mediana y grande. Estamos seguros de que reduciremos el coste, pero no todo el mundo va a tener un gran ajuste. Piensa en las tallas de los pantalones ahora (o en las marcas de camisas con muchas tallas (XS, XL, XXL, etc.)) donde tienes muchas más categorías (o grupos). Para algunos campos la elección del clúster óptimo puede depender de algunos conocimientos externos como el costo de producción de los clústeres k para satisfacer a los clientes con el mejor ajuste posible. En otros campos como la biología, en los que se intenta determinar el número exacto de células, se requeriría un enfoque más profundo. Por ejemplo, muchas de las heurísticas anteriores se contradicen entre sí para determinar cuál es el número óptimo de clusters. Ten en cuenta que todos ellos estaban evaluando el algoritmo de los k-medios en diferentes números de k. Esto podría significar potencialmente que el algoritmo de los k-medios falla y que ninguna k es buena. El algoritmo de k-means no es un algoritmo muy robusto que sea sensible a los valores atípicos y este conjunto de datos es muy pequeño. Lo mejor sería explorar los métodos anteriores en la salida de otros algoritmos (por ejemplo, la agrupación jerárquica que clValid sugirió), reunir más datos o dedicar algún tiempo a etiquetar las muestras para otros métodos de ML, si es posible.
+
+En última instancia, quisiéramos responder a preguntas como "¿qué es lo que hace que este conglomerado sea único respecto de los demás?" y "¿cuáles son los conglomerados que son similares entre sí? Seleccionemos cinco cúmulos e interroguemos las características de estos cúmulos.
+
+
+```{r}
+# Compute dissimilarity matrix with euclidean distances
+d <- dist(mammals_scaled, method = "euclidean")
+
+# Hierarchical clustering using Ward's method
+res.hc <- hclust(d, method = "ward.D2" )
+
+# Cut tree into 5 groups
+grp <- cutree(res.hc, k = 5)
+
+# Visualize
+plot(res.hc, cex = 0.6) # plot tree
+rect.hclust(res.hc, k = 5, border = 2:5) # add rectangle
+```
+
+
+```{r}
+# Execution of k-means with k=5
+final <- kmeans(mammals_scaled, 5, nstart = 30)
+
+fviz_cluster(final, data = mammals_scaled) + 
+  theme_minimal() + 
+  ggtitle("k = 5")
+```
+
+Extraigamos los clusters y añadámoslos a nuestros datos iniciales para hacer algunas estadísticas descriptivas a nivel de cluster:
+
+
+```{r}
+as.data.frame(mammals_scaled) %>% 
+  mutate(Cluster = final$cluster) %>% 
+  group_by(Cluster) %>% 
+  summarise_all("mean") %>% 
+  kable() %>% 
+  kable_styling()
+```
+
+Vemos que el grupo 2, compuesto únicamente por el Conejo, tiene un alto contenido de cenizas. El grupo 3, compuesto por la foca y el delfín, tiene un alto contenido de grasa, lo que tiene sentido dadas las duras exigencias de un clima tan frío, mientras que el grupo 4 tiene un gran contenido de lactosa.
+
+
+```{r}
+mammals_df <- as.data.frame(mammals_scaled) %>% 
+  rownames_to_column()
+
+cluster_pos <- as.data.frame(final$cluster) %>% 
+  rownames_to_column()
+colnames(cluster_pos) <- c("rowname", "cluster")
+
+mammals_final <- inner_join(cluster_pos, mammals_df)
+
+ggRadar(mammals_final[-1], aes(group = cluster), rescale = FALSE, legend.position = "none", size = 1, interactive = FALSE, use.label = TRUE) + 
+  facet_wrap(~cluster) + 
+  scale_y_discrete(breaks = NULL) + # don't show ticks
+  theme(axis.text.x = element_text(size = 10)) + 
+  scale_fill_manual(values = rep("#1c6193", nrow(mammals_final))) +
+  scale_color_manual(values = rep("#1c6193", nrow(mammals_final))) + 
+  ggtitle("Mammals Milk Attributes")
+```
+
+
+```{r}
+mammals_df <- as.data.frame(mammals_scaled)
+mammals_df$cluster <- final$cluster
+mammals_df$cluster <- as.character(mammals_df$cluster)
+
+ggpairs(mammals_df, 1:5, mapping = ggplot2::aes(color = cluster, alpha = 0.5),
+                                                              diag = list(continuous = wrap("densityDiag")),
+                                                              lower=list(continuous = wrap("points", alpha=0.9)))
+```
+
+
+```{r}
+# plot specific graphs from previous matrix with scatterplot
+g <- ggplot(mammals_df, aes(x = water, y = lactose, color = cluster)) +
+  geom_point() +
+  theme(legend.position = "bottom")
+
+ggExtra::ggMarginal(g, type = "histogram", bins = 20, color = "grey", fill = "blue")
+
+b <- ggplot(mammals_df, aes(x = protein, y = fat, color = cluster)) + 
+  geom_point() + 
+  theme(legend.position = "bottom")
+
+ggExtra::ggMarginal(b, type = "histogram", bins = 20, color = "grey", fill = "blue")
+```
+
+
+```{r}
+ggplot(mammals_df, aes(x = cluster, y = protein)) + 
+  geom_boxplot(aes(fill = cluster))
+
+ggplot(mammals_df, aes(x = cluster, y = fat)) + 
+  geom_boxplot(aes(fill = cluster))
+
+ggplot(mammals_df, aes(x = cluster, y = lactose)) + 
+  geom_boxplot(aes(fill = cluster))
+
+ggplot(mammals_df, aes(x = cluster, y = ash)) + 
+  geom_boxplot(aes(fill = cluster))
+
+ggplot(mammals_df, aes(x = cluster, y = water)) + 
+  geom_boxplot(aes(fill = cluster))
+```
+
+```{r}
+# Los gráficos de coordiantes paralelos nos permiten poner cada característica en una columna separada y líneas que conectan cada columna
+
+ggparcoord(data = mammals_df, 
+           columns = 1:5, 
+           groupColumn = 6, 
+           alphaLines = 0.4, 
+           title = "Parallel Coordinate Plot for the Mammals Milk Data", 
+           scale = "globalminmax", showPoints = TRUE) + 
+  theme(legend.position = "bottom")
+```
+

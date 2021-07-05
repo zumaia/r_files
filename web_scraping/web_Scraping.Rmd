@@ -1,0 +1,223 @@
+---
+title: 'Tutorial Web Scraping'
+author: "Autor: Oscar Rojo Martín"
+date: "Junio 2020"
+output:
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+    includes:
+      in_header: header.html
+  pdf_document:
+    highlight: zenburn
+    toc: yes
+  word_document: default
+---
+
+
+# .- Introducción
+
+https://www.business-science.io/learn-r/2020/04/20/setup-python-in-r-with-rmarkdown.html
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+# Tutorial de web scraping en R
+
+
+Ref.:  https://towardsdatascience.com/web-scraping-tutorial-in-r-5e71fd107f32
+
+Hace un par de días, Kevin Markham de la Escuela de Datos, publicó un bonito tutorial sobre web scraping usando 16 líneas de código Python.
+
+El web scraping de las mentiras del Presidente en 16 líneas de Python
+Nota: Este tutorial está disponible como un cuaderno de Jupyter, y el conjunto de datos de las mentiras está disponible como un archivo CSV,...www.dataschool.io *texto en cursiva
+http://www.dataschool.io/python-web-scraping-of-president-trumps-lies/
+*
+
+El tutorial es simple y muy bien hecho. Le recomiendo encarecidamente que le eche un vistazo. De hecho, tal tutorial me motivó a replicar los resultados pero esta vez usando R. Con el permiso de Kevin, usaré un diseño similar al de su entrada en el blog. También usaré el mismo sitio web sobre un artículo de opinión llamado Mentiras de Trump. Esto debería facilitar cualquier comparación entre los dos enfoques.
+
+## Examinando el artículo del New York Times
+
+Para una buena descripción del artículo con el que trabajaremos, te animo a que le eches un vistazo al tutorial de Kevin. En resumen, los datos que nos interesan consisten en un registro de mentiras, cada uno con 4 partes:
+
+    La fecha de la mentira
+    La mentira en sí misma
+    Una explicación de por qué era una mentira
+    Un URL para un artículo que apoye la explicación (incrustado en el texto)
+
+
+
+
+# .- Limpieza y preparación entorno trabajo
+```{r Limpieza y preparación}
+# Limpiamos el entorno de Trabajo
+rm(list=ls())
+
+# Limpiamos la consola
+cat("\014")
+
+# Comprobamos que está bien establecido el directorio
+getwd()
+dir()
+```
+```{r Directorio de trabajo}
+#indicamos el directorio de trabajo
+setwd("~/Documentos/R/web_scraping")
+```
+
+
+## .- Carga de librerias
+```{r Carga librerias}
+# Importamos las librerias a utilizar
+
+packages <- c( "rvest","stringr","dplyr","lubridate","readr")
+newpack  = packages[!(packages %in% installed.packages()[,"Package"])]
+
+if(length(newpack)) install.packages(newpack)
+a=lapply(packages, library, character.only=TRUE)
+```
+
+## Leyendo la página web en R
+
+Para leer la página web en R, podemos usar el paquete rvest, hecho por el gurú de R Hadley Wickham. Este paquete está inspirado en bibliotecas como Beautiful Soup, para facilitar el raspado de datos de páginas web html. La primera función importante a usar es read_html(), que devuelve un documento XML que contiene toda la información de la página web.
+
+```{r}
+library(rvest)
+webpage <- read_html("https://www.nytimes.com/interactive/2017/06/23/opinion/trumps-lies.html")
+webpage
+```
+
+
+## Recoger todos los registros
+
+Como se explica en el tutorial de Kevin, cada registro tiene la siguiente estructura en el código HTML:
+
+<span class="short-desc"><strong> DATE </strong> LIE <span class="short-truth"><a href="URL"> EXPLANATION </a></span></span>
+
+Por lo tanto, para recoger todas las mentiras, necesitamos identificar todas las etiquetas que pertenecen a class="shortdesc". La función que nos ayudará a hacerlo es html_nodes(). Esta función requiere el documento XML que hemos leído y los nodos que queremos seleccionar. Para esto último, se recomienda utilizar el SelectorGadget, una herramienta de código abierto que facilita la generación y el descubrimiento de los selectores de CSS. Usando dicha herramienta, encontramos que todas las mentiras pueden ser seleccionadas usando el selector ".short-desc".
+
+Therefore, to collect all the lies, we need to identify all the <span> tags that belong to class="short-desc". The function that will help us to do so is html_nodes(). This function requires the XML document that we have read and the nodes that we want to select. For the later, it is encouraged to use the SelectorGadget, an open source tool that makes CSS selector generation and discovery easy. Using such a tool, we find that all the lies can be selected by using the selector ".short-desc".
+
+```{r}
+results <- webpage %>% html_nodes(".short-desc")
+results
+```
+
+
+Esto devuelve una lista con 116 nodos XML que contienen la información de cada una de las 116 mentiras de la página web.
+
+Fíjate que estoy usando el %>% pipe-operator del paquete magrittr, que puede ayudar a expresar operaciones complejas como elegantes tuberías compuestas de piezas simples y fáciles de entender.
+
+## Extrayendo la fecha
+
+Comencemos con algo simple y concentrémonos en extraer todos los detalles necesarios de la primera mentira. Luego podemos extender esto a todos los demás fácilmente. Recuerden que la estructura general para un solo registro es:
+
+<span class="short-desc"><strong> DATE </strong> LIE <span class="short-truth"><a href="URL"> EXPLANATION </a></span></span>
+
+Fíjese que la fecha está incrustada dentro de la etiqueta . Para seleccionarla, podemos usar la función html_nodes() usando el selector "strong".
+
+Notice that the date is embedded within the "<strong_>" tag. To select it, we can use the html_nodes() function using the selector "strong".
+
+```{r}
+first_result <- results[1]
+first_result %>% html_nodes("strong")
+```
+
+
+Entonces necesitamos usar la función html_text() para extraer sólo el texto, con el argumento trim activo para recortar los espacios anteriores y posteriores. Finalmente, utilizamos el paquete stringr para añadir el año a la fecha extraída.
+
+```{r}
+first_result <- results[1]
+date <- first_result %>% html_nodes("strong") %>% html_text(trim = TRUE)
+
+# library(stringr)
+str_c(date, ', 2017')
+```
+
+## Extrayendo la mentira
+
+Para seleccionar la mentira, necesitamos hacer uso de la función xml_contents() que forma parte del paquete xml2 (este paquete es requerido por el paquete rvest, por lo que no es necesario cargarlo). La función devuelve una lista con los nodos que forman parte de first_result.
+
+```{r}
+xml_contents(first_result)
+```
+
+
+Fíjese que hay un par de citas extra ("...") que rodean la mentira. Para deshacernos de ellas, simplemente usamos la función str_sub() del paquete stringr para seleccionar sólo la mentira.
+
+```{r}
+lie <- xml_contents(first_result)[2] %>% html_text(trim = TRUE)
+str_sub(lie, 2, -2)
+```
+
+## Extrayendo la explicación
+
+Esperemos que a estas alturas no sea demasiado complicado ver que para extraer la explicación simplemente tenemos que seleccionar el texto dentro de la etiqueta que pertenece a class=".short-truth". Esto extraerá el texto junto con los paréntesis de apertura y cierre, pero podemos deshacernos de ellos fácilmente.
+
+```{r}
+explanation <- first_result %>% 
+  html_node(".short-truth") %>% html_text(trim = TRUE)
+str_sub(explanation, 2, -2)
+```
+Extrayendo el URL
+
+Por último, para obtener la URL, noten que es un atributo dentro de la etiqueta . Simplemente seleccionamos este nodo con la función html_nodes(), y luego seleccionamos el atributo href con la función html_attr().
+
+```{r}
+url <- first_result %>% html_node("a") %>% html_attr("href")
+url
+```
+
+Construir el conjunto de datos
+
+Encontramos una forma de extraer cada una de las 4 partes del primer registro. Podemos extender este proceso a todos los demás usando un bucle de for. Al final, queremos tener un marco de datos con 116 filas (una para cada registro) y 4 columnas (para mantener la fecha, la mentira, la explicación y la URL). Una forma de hacerlo es crear un marco de datos vacío y simplemente añadir una nueva fila a medida que se procesa cada nuevo registro. Sin embargo, esto no se considera una buena práctica. Como se sugiere aquí, vamos a crear un solo marco de datos para cada registro y almacenarlos todos en una lista. Una vez que tengamos los 116 marcos de datos, los uniremos usando la función bind_rows() del paquete dplyr. Esto crea nuestro conjunto de datos deseado.
+
+```{r}
+# library(dplyr)
+records <- vector("list", length = length(results))
+
+for (i in seq_along(results)) {
+    date <- str_c(results[i] %>% html_nodes("strong") %>% html_text(trim = TRUE), ", 2017")
+    lie <- str_sub(xml_contents(results[i])[2] %>% html_text(trim = TRUE), 2, -2)
+    explanation <- str_sub(results[i] %>% html_nodes(".short-truth") %>% html_text(trim = TRUE), 2, -2)
+    url <- results[i] %>% html_nodes("a") %>% html_attr("href")
+    records[[i]] <- data_frame(date = date, lie = lie, explanation = explanation, url = url)
+}
+
+df <- bind_rows(records)
+glimpse(df)
+```
+Obsérvese que la columna de la fecha se considera un vector de carácter. Sería bueno tenerla como un vector de fecha y hora en su lugar. Para ello, podemos usar el paquete de lubridate y usar la función mdy() (mes-día-año) para hacer la conversión.
+
+```{r}
+# library(lubridate)
+df$date <- mdy(df$date)
+glimpse(df)
+```
+## Exportar el conjunto de datos a un archivo CSV
+
+Si quieres exportar tu conjunto de datos, puedes usar la función write.csv() que viene por defecto con R, o la función write_csv() del paquete readr, que es dos veces más rápida y conveniente que la primera.
+
+```{r}
+readr::write_csv(df, "trump_lies.csv")
+```
+
+
+Del mismo modo, para recuperar su conjunto de datos, puede utilizar la función predeterminada read.csv() o la función read_csv() del paquete readr.
+
+```{r}
+df <- readr::read_csv("trump_lies.csv")
+head(df)
+```
+
+quiero mencionar que los paquetes de stringr, dplyr, lubricante y readr son todos parte de la familia tidyverse. Esta es una colección de paquetes R que están diseñados para trabajar juntos para hacer el proceso de análisis de datos más fácil. De hecho, también podrías usar el popular paquete purrr para evitar el bucle for. Sin embargo, esto requeriría la creación de una función que mapee cada registro a un marco de datos. Para otro ejemplo de cómo hacer web scraping, mira esta impresionante entrada de blog de Dean Attali.
+
+Espero que encuentres este tutorial útil. Su propósito no es mostrar qué lenguaje de programación es mejor, sino aprender tanto de Python como de R, así como aumentar tus habilidades de programación y herramientas para abordar un conjunto más diverso de problemas.

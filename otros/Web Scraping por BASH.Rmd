@@ -1,0 +1,196 @@
+---
+title: "Web Scarping with bash"
+author: "Oscar Rojo Martín"
+date: "27/5/2020"
+output: html_document
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+
+# .- Limpieza y preparación entorno trabajo
+```{r Limpieza y preparación}
+# Limpiamos el entorno de Trabajo
+rm(list=ls())
+
+# Limpiamos la consola
+cat("\014")
+
+# Comprobamos que está bien establecido el directorio
+getwd()
+dir()
+```
+# .- Directorio de trabajo
+```{r Directorio de trabajo}
+#indicamos el directorio de trabajo
+setwd("~/Documentos/R")
+```
+
+When and why using bash?
+
+Well, good tools for web scraping are paid. If the web site has a quite simple HTML, you can easily use curl to perform the request and then extract the needed values using bash commands grep, cut , sed, …
+
+How to do it
+
+Open the web page you want to scrap and then View Page Source.
+
+Try to find on HTML code the values you will want to extract. Some values will be easy to get because they are in a specific named tag but others will not. Let’s see some examples.
+
+
+```{bash}
+
+
+// curl the page and save content to tmp_file
+
+curl page.htm > tmp_file
+```
+
+```{bash}
+// All below commands will have as result "The content i want"// Simple tag (within other tags)
+
+// <ul class="list"><li class="specific_class"><span>The content i want</span></li><div>...
+
+cat tmp_file | grep "class=\"specific_class\"" | cut -d'>' -f4 | cut -d'<' -f1
+```
+
+
+```{bash}
+
+
+// Content inside a meta tag
+// <meta property="specific_property" content="The content i want"/>
+
+cat tmp_file | grep specific_property | cut -d'"' -f4
+```
+
+
+
+```{bash}
+
+
+// If the tag you want occurs more than once in the output
+// <ul class="list"><li class="specific_class"><span>The content i want</span></li><div>...
+// <h1 class="specific_class">I do not want this</h1>
+// If you want the first occurrence - use grep -m1
+
+cat tmp_file | grep -m1 "class=\"specific_class\"" | cut -d'>' -f4 | cut -d'<' -f1
+```
+
+
+```{bash}
+// If you don't know which occurrence it is - try to grep by something else
+cat tmp_file | grep "class=\"specific_class\"" | grep span | cut -d'>' -f4 | cut -d'<' -f1
+
+```
+
+
+
+```{bash}
+// If tag and value are not in the same line
+// <h1 class="specific_class">
+// The content i want
+// </h1>
+
+cat tmp_file | grep -A1 "class=\"specific_class\"" | tail -1
+```
+
+
+
+
+```{bash}
+
+// If tag and value are not in the same line and content is split by lines
+// <h1 class="specific_class">
+// The content
+// i want
+// </h1>
+
+cat tmp_file | grep -A2 "class=\"specific_class\"" | tail -2 | sed 'N;s/\n/ /'
+```
+
+If you want to extract data from several pages with the same structure, you can add the curl to a while for all URLs. Imagine that you’re extracting from a website that has pagination and you want to extract data from all pages. You could do the following:
+
+
+```{bash}
+// Assuming there are 20 pages on the website
+n="1"
+while [ $n -lt 20 ]
+do
+  curl "page.htm?pag=$n" > tmp_file
+  ...
+  n=$[$n+1]
+done
+```
+
+
+
+Let’s see a full example and a script to extract the needed info.
+
+We want to extract info from all the books existent in a website called https://www.ebookslist.htm. Let’s assume that each book can be accessed by param book and there are 100 in total.
+
+Part of the html which contains the info we need:
+
+
+<ul class="list"><li class="title"><span>The Subtle Art of Not Giving a F*ck</span></li><div>...
+<meta property="date_added" content="16/04/2017"/>
+<ul class="list"><li class="price"><span>EUR 18</span></li><div>...
+<h1 class="shipping">Free shipping</h1>
+<h1 class="author">
+Mark Manson and Roger Wayne
+</h1>
+<h1 class="description">
+#1 New York Times Bestseller Over 2 million copies sold In this generation-defining self-help guide, a superstar blogger cuts through the crap to show us how to stop trying to be "positive" all the time so that we can truly become better, happier people.
+For decades, we've been told that positive thinking is the key to a happy, rich life. "F**k positivity," Mark Manson says.
+</h1>
+
+
+
+```{bash}
+#!/bin/bashn="1"
+rm -f tmp_file extractData.csv// write headers to CSV file
+echo "Date;Title;Author;Description;Price;Shipping" > extractData.csvwhile [ $n -lt 100]
+do
+  // exec the curl and save to tmp_file
+  curl "https://www.ebookslist.htm?book=$n" > tmp_file
+  
+  // increase "book"
+  n=$[$n+1]  // get date
+  date=$(cat tmp_file | grep date_added | cut -d'"' -f4)  
+  // get title
+  title=$(cat tmp_file |grep "class=\"title\"" | cut -d'>' -f4 | cut -d'<' -f1)  
+  // get author
+  author=$(cat tmp_file |grep -A1 "class=\"author\"" | tail -1)  
+  // get description
+  desc=$(cat tmp_file |grep -A2 "class=\"description\"" | tail -2 | sed 'N;s/\n/ /')
+  
+  // get price
+  price=$(cat tmp_file |grep "class=\"price\"" | grep span | cut -d'>' -f4 | cut -d'<' -f1)  
+  // get shipping
+  ship=$(cat tmp_file |grep "class=\"shipping\"" | cut -d'>' -f2 | cut -d'<' -f1)  
+  // write book data into the CSV file
+  echo "$date;$title;$author;$desc;$price;$ship" >> extractData.csv
+  
+done
+```
+
+CSV result for the html example:
+
+Date;Title;Author;Description;Price;Shipping
+16/04/2017;The Subtle Art of Not Giving a F*ck;Mark Manson and Roger Wayne;#1 New York Times Bestseller Over 2 million copies sold In this generation-defining self-help guide, a superstar blogger cuts through the crap to show us how to stop trying to be "positive" all the time so that we can truly become better, happier people. For decades, we've been told that positive thinking is the key to a happy, rich life. "F**k positivity," Mark Manson says.;EUR 18;Free shipping
+
+Important: if you get an “illegal byte sequence error” (mostly happens on sed), add the following to your script
+
+
+```{bash}
+export LC_CTYPE=C
+export LANG=C
+```
+

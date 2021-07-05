@@ -1,0 +1,28 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1593958943885.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "1170395893",
+    "id" : "55B8BDA0",
+    "lastKnownWriteTime" : 1593963717,
+    "last_content_update" : 1593963717186,
+    "path" : "~/Documents/Workspace/R/local/OscarRLadies/florence_2.Rmd",
+    "project_path" : "florence_2.Rmd",
+    "properties" : {
+        "chunk_output_type" : "inline",
+        "cursorPosition" : "129,239",
+        "last_setup_crc32" : "41A25A68936b3588",
+        "scrollLine" : "124",
+        "tempName" : "Untitled1"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 2,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_markdown"
+}
