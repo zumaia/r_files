@@ -1,0 +1,345 @@
+---
+title: 'Estadistica Avanzada: PEC1 - A2 - Estadística inferencial: tests de hipótesis de una y dos muestras'
+author: "Autor: Oscar Rojo Martín"
+date: "Octubre 2020"
+output:
+  html_document:
+    highlight: default
+    code_folding: show   # mostrar boton para mostrar o no el código
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_float: true # tabla contenidos flotante
+    toc_depth: 2
+    includes:
+      in_header: header.html
+  pdf_document:
+    latex_engine: xelatex
+    highlight: zenburn
+    toc: yes
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+******
+## Introducción
+
+
+***********
+#### Preparamos nuestro workspace
+```{r}
+# Limpiamos el workspace, por si hubiera algun dataset o informacion cargada
+rm(list = ls())
+
+# Limpiamos la consola
+cat("\014")
+
+# Cambiar el directorio de trabajo
+setwd("~/Documentos/R/opendata")
+setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+```
+
+
+
+#### Instalamos librerias
+```{r}
+packages <- c("dplyr", "tidyr", "skimr", "lubridate", "ggplot2", 'purrr')
+new <- packages[!(packages %in% installed.packages()[,"Package"])]
+if(length(new)) install.packages(new)
+a=lapply(packages, require, character.only=TRUE)
+```
+
+```{r}
+demografia <- read.csv("https://www.donostia.eus/datosabiertos/recursos/demografia-origen/demografianacionalidadbarriockan.csv", sep=",")
+vehiculos <- read.csv("https://www.donostia.eus/datosabiertos/recursos/vehiculos_barrio/vehiculosbarrio.csv", sep=",")
+tasas <- read.csv("https://www.donostia.eus/datosabiertos/recursos/tasas_tipo/pfitasastipobarriockan.csv", sep=",")
+recibos <- read.csv("https://www.donostia.eus/datosabiertos/recursos/impuestos_tipo/pfiimpuestostipobarriockan.csv", sep=",")
+habitantes <- read.csv("https://www.donostia.eus/datosabiertos/recursos/habitantes-barrios/habitantesporbarrio.csv", sep=",")
+renta <- read.csv("https://www.donostia.eus/datosabiertos/recursos/eustat_renta/eustatrentabarrio.csv", sep=",")
+indices_demografia <- read.csv("https://www.donostia.eus/datosabiertos/recursos/demografia-indices/demografiaindicesbarriockan.csv", sep=",")
+paro <- read.csv("https://www.donostia.eus/datosabiertos/recursos/eustat_paro/eustatparobarrio.csv", sep=",")
+extranjeros <- read.csv("https://www.donostia.eus/datosabiertos/recursos/demografia-extranjeros/demografiaextranjerosbarriockan.csv", sep=",")
+estudios <- read.csv("https://www.donostia.eus/datosabiertos/recursos/demografia-nivelestudios/demografianivelestudiosbarriockan.csv", sep=",")
+
+```
+```{r}
+colnames(demografia)= c('año','barrio','nacido','habitantes','habit_M','habit_H')
+colnames(estudios)= c('año','barrio','est_eusk','estudios','est_Tot','Mujer','Hombre')
+colnames(extranjeros)= c('año','barrio','extr_M','ext_H','ext_Total')
+colnames(habitantes)= c('barrio','habitantes')
+colnames(indices_demografia)= c('año','barrio','tasa_nac_total','tasa_nac_M','tasa_nac_H','fecundidad','tasa_tendencia_total','tasa_tendencia_M','tasa_tendencia_H','tasa_envejecimiento_total','tasa_envejecimiento_M','tasa_envejecimiento_H')
+colnames(paro)= c('año','barrio','tasa','tasa_paro_H','tasa_paro_M','paro_16_39','paro_40_64','paro_>65','paro_nac','paro_extra')
+colnames(recibos)= c('año','barrio','recibos_eus','recibos_cast','importe')
+colnames(renta)= c('año','barrio','renta_Tot','renta_H','renta_M','renta', 'renta_18_39','renta_40_64', 'renta_65', 'renta_nac','renta_ext')
+colnames(tasas)= c('año','barrio','tasa_eus','tasa_cast','importe')
+colnames(vehiculos)= c('barrio','vehi_total','turismos','motos','indic_motorizacion')
+```
+```{r}
+estu_barrio_genero <- estudios %>%
+  filter(año==2019) %>%
+  select(-año,-est_eusk,-est_Tot)%>%
+  gather('genero', 'estudiantes', 'Mujer':'Hombre')%>%
+  reshape(idvar=c('barrio',"genero"), v.names = "estudiantes", timevar = "estudios", direction="wide")%>%
+  arrange(barrio)
+```
+
+
+
+
+```{r}
+habitantes <- habitantes %>%
+  mutate(barrio = toupper(barrio))
+
+demo_barrio <- demografia %>%
+  filter(año==2019) %>%
+  select(-año,-nacido)
+
+estu_barrio <- estudios %>% 
+  filter(año==2019) %>%
+  select(-año,-est_eusk)%>%
+  reshape(idvar = "barrio",timevar = "estudios", direction = "wide")%>%
+  select(barrio, starts_with("est_Tot"))
+
+extr_barrio <- extranjeros %>% 
+  filter(año==2019) %>%
+  select(barrio, ext_Total)
+
+indi_barrio <- indices_demografia %>%
+  filter(año==2019) %>%
+  select(barrio, tasa_nac_total, fecundidad, tasa_tendencia_total, tasa_envejecimiento_total)
+
+paro_barrio <- paro %>%
+  filter(año==2017) %>%
+  select(barrio, tasa, paro_16_39 , paro_40_64 , `paro_>65`)
+
+reci_barrio <- recibos %>% 
+  filter(año==2019) %>%
+  select(-año, -recibos_eus)%>%
+  reshape(idvar = "barrio",timevar = "recibos_cast", direction = "wide")
+
+renta_barrio <- renta %>%
+  filter(año==2017)%>%
+  select(barrio, renta, renta_18_39, renta_40_64, renta_65)
+
+tasa_barrio <- tasas %>% 
+  filter(año==2019) %>%
+  select(-año, -tasa_eus)%>%
+  rename(tasa = tasa_cast)%>%
+  reshape(idvar = "barrio",timevar = "tasa", direction = "wide")
+
+vehi_barrio <- vehiculos %>%
+  mutate(Tasa_Moto_x100 = format(round(indic_motorizacion/1000, digits = 2), nsmall = 2)) %>%
+  select(-indic_motorizacion)
+  
+```
+```{r}
+vehi_barrio$Tasa_Moto_x100 <- as.numeric(vehi_barrio$Tasa_Moto_x100)
+```
+```{r}
+ab <- merge(demo_barrio, estu_barrio, by = "barrio", all.x = TRUE)
+abc <- merge (ab, extr_barrio, by = 'barrio', all.x = TRUE)
+abcd <- merge (abc, habitantes, by = 'barrio', all.x = TRUE)
+```
+
+
+```{r}
+abcde <- merge (abcd, indi_barrio, by = 'barrio', all.x = TRUE)
+abcdef <- merge (abcde, paro_barrio, by = 'barrio', all.x = TRUE)
+abcdefg <- merge (abcdef, reci_barrio, by = 'barrio', all.x = TRUE)
+abcdefgh <- merge (abcdefg, renta_barrio, by = 'barrio', all.x = TRUE)
+abcdefghi <- merge (abcdefgh, tasa_barrio, by = 'barrio', all.x = TRUE)
+abcdefghij <- merge (abcdefghi, vehi_barrio, by = 'barrio', all.x = TRUE)
+total <- abcdefghij
+```
+```{r}
+# Convert na to 0
+total[is.na(total)] <- 0
+# 
+```
+```{r}
+total <- select(total, -'habitantes.y')
+```
+
+```{r}
+colnames(total)= c('BARRIO', 'POBLACION', 'MUJERES', 'HOMBRES', 'ED.SECUNDARIA', 'SIN_ESTUDIOS_PREES_SECUND', 'PROFESIONALES', 'UNIVERSITARIOS', 'EXTRANJEROS', 'TASA_NACIMIENTOS', 'TASA_FECUNDIDAD', 'TASA_TENDENCIA', 'TASA_ENVEJECIMIENTO', 'TASA_PARO', 'PARO<39', 'PARO39-64', 'PARO>65', 'IBI', 'IAE', 'SANCION_URBA', 'OBLIGA_URBANIS', 'RENTA_FAMILIA', 'RENTA>39', 'RENTA40-64', 'RENTA>65', 'AGUA', 'LICENCIA_CONST', 'BASURA', 'VADO', 'MESAS/SILLAS', 'VALLAS', 'OCUPA_DOM','APERTURA', 'N_VEHICULOS', 'N_TURISMOS', 'N_MOTOS', 'MOTORIZ_X_1000')
+```
+```{r}
+for(col in names(total)[3:8]) {
+  total[paste0(col, "_%_xBarrio")] = ((total[col] / total$POBLACION)*100)
+}
+for(col in names(total)[3:8]) {
+  total[paste0(col, "_%_s/total")] = (total[col] / sum(total[col])*100)
+}
+
+total$VEHICxPERSONA = total$N_VEHICULOS/total$POBLACION
+for(col in names(total)[18:21]) {
+  total[paste0("ingreso", col, "_X_PERS")] = ((total[col] / total$POBLACION)*100)
+}
+for(col in names(total)[26:33]) {
+  total[paste0("ingreso", col, "_X_PERS")] = ((total[col] / total$POBLACION)*100)
+}
+
+total$'EXTR_%' = (total$EXTRANJEROS/total$POBLACION)*100
+
+for(col in names(total)[47:48]) {
+  total[paste0(col, "_%_s/total")] = (total[col] / sum(total[col])*100)
+}
+
+total$AGUA_PERSONA = (total$AGUA/total$POBLACION)*100
+total$BASURA_PERSONA = (total$BASURA/total$POBLACION)*100
+
+for(col in names(total)[62:63]) {
+  total[paste0(col, "_%_s/total")] = (total[col] / sum(total[col])*100)
+}
+
+total$'COCHES/MOTOS' <- (total$N_MOTOS/total$N_TURISMOS)
+total$'VADO/VEHICULOS' <- (total$VADO/total$N_VEHICULOS)
+```
+```{r}
+# Convert na to 0
+total[is.na(total)] <- 0
+# 
+```
+
+```{r}
+Percentile_00  = min(total$RENTA_FAMILIA)
+Percentile_33  = quantile(total$RENTA_FAMILIA, 0.33333)
+Percentile_67  = quantile(total$RENTA_FAMILIA, 0.66667)
+Percentile_100 = max(total$RENTA_FAMILIA)
+
+
+RB = rbind(Percentile_00, Percentile_33, Percentile_67, Percentile_100)
+
+dimnames(RB)[[2]] = "Value"
+
+RB
+
+
+
+total$SITUACION_RENTA[total$RENTA_FAMILIA >= Percentile_00 & total$RENTA_FAMILIA <  Percentile_33]  = "RENTA BAJA"
+total$SITUACION_RENTA[total$RENTA_FAMILIA >= Percentile_33 & total$RENTA_FAMILIA <  Percentile_67]  = "RENTA MEDIA"
+total$SITUACION_RENTA[total$RENTA_FAMILIA >= Percentile_67 & total$RENTA_FAMILIA <= Percentile_100] = "RENTA ALTA"
+```
+
+```{r}
+Percentile_00  = min(total$VEHICxPERSONA)
+Percentile_33  = quantile(total$VEHICxPERSONA, 0.33333)
+Percentile_67  = quantile(total$VEHICxPERSONA, 0.66667)
+Percentile_100 = max(total$VEHICxPERSONA)
+
+
+RB = rbind(Percentile_00, Percentile_33, Percentile_67, Percentile_100)
+
+dimnames(RB)[[2]] = "Value"
+
+RB
+
+
+
+total$MOTORIZACION[total$VEHICxPERSONA >= Percentile_00 & total$VEHICxPERSONA <  Percentile_33]  = "POCO MOTORIZADO"
+total$MOTORIZACION[total$VEHICxPERSONA >= Percentile_33 & total$VEHICxPERSONA <  Percentile_67]  = "MOTORIZADO"
+total$MOTORIZACION[total$VEHICxPERSONA >= Percentile_67 & total$VEHICxPERSONA <= Percentile_100] = "MUY MOTORIZADO"
+```
+
+```{r}
+total <- total %>% select(BARRIO,SITUACION_RENTA,MOTORIZACION, everything())
+```
+
+```{r}
+summary(total)
+```
+```{r}
+glimpse(total)
+```
+```{r}
+skim(total)
+```
+```{r}
+funModeling::df_status(total)
+```
+
+```{r}
+write.csv(total,"total.csv")
+write.csv(total,"shinyapp/www/total.csv")
+```
+
+
+
+
+
+
+
+
+```{r}
+total %>%
+  select(-HABI_TOTAL)%>%
+  mutate('%_POBL_X_BARRIO' = format(round((POBLACION/sum(POBLACION))*100, digits = 3), nsmall =3), '%_EXTRANJEROS'= format(round((EXTRANEJEROS/sum(EXTRANEJEROS))*100, digits = 3), nsmall =3))%>%
+  
+  
+```
+
+
+```{r}
+total_genero_estudios <- total %>%
+  gather('GENERO', 'POBLACIÓN', 'MUJERES':'HOMBRES')%>%
+  gather('ESTUDIOS', 'ESTUDIANTES', 'ED.SECUNDARIA':'UNIVERSITARIOS')%>%
+  arrange('GENERO')
+```
+
+```{r}
+summary(total)
+```
+```{r}
+glimpse(total)
+```
+```{r}
+skim(total)
+```
+```{r}
+funModeling::total_status(total)
+```
+```{r}
+df$Operator <- as.factor(df$Operator)
+df$Failure <- as.factor(df$Failure)
+```
+```{r}
+df <- df %>%
+  mutate(Measure2 = as.factor(Measure2),
+         Measure3 = as.factor(Measure3))%>%
+  filter(Temperature > 50)
+```
+
+
+```{r}
+boxplot(df)
+```
+```{r}
+df %>%
+  dplyr::select(c(-Operator,-Measure2,-Measure3,-Failure)) %>%
+  keep(is.numeric) %>% 
+  gather() %>% 
+  ggplot(aes(value)) +
+    facet_wrap(~ key, scales = "free") +
+    geom_histogram()
+```
+```{r}
+df %>%
+  select_if(is.integer) %>%
+  cor() %>%
+  round(digits = 2)
+```
+```{r}
+df %>%
+  select_if(is.integer) %>%
+  gather() %>%
+  ggplot(aes(value)) + geom_density()+
+  facet_wrap(~key,scales='free')+
+  theme(axis.text = element_text(size = 6))
+```
+
+
+
+
